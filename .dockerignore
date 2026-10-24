@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.data
+*.log
+Dockerfile
+docker-compose.yml
+.env*
+!.env.production.example
+npm-debug.log*
+README*
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+docs
+scripts

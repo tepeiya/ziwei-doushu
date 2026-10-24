@@ -1,0 +1,53 @@
+# 生产编排：应用 + Postgres + Redis + Nginx(HTTPS)
+# 用法：
+#   1) 复制 .env.production.example 为 .env.production 并填值
+#   2) docker compose --env-file .env.production up -d --build
+#
+# 说明：
+#   - 当前 lib/db 为 JSON 文件、缓存/限流为内存态；postgres/redis 已就绪，
+#     待「部署指南·生产必做改造」完成后设置 DATABASE_URL / REDIS_URL 即生效。
+#   - 未切 PG 时 app 用 .data 卷持久化（单实例可用，多实例会不一致）。
+
+services:
+  app:
+    build: .
+    env_file:
+      - .env.production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - app_data:/app/.data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ziwei
+      POSTGRES_PASSWORD: change_me_strong
+      POSTGRES_DB: ziwei
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  app_data:
+  pg_data:
