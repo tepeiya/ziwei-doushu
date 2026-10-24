@@ -7,12 +7,19 @@
 import type { NextRequest } from 'next/server';
 import { streamChat, type ChatMessage } from '@/lib/server/llm';
 import { buildSystemPrompt, buildChartContext } from '@/lib/server/prompt';
+import { getClientIp, rateLimit } from '@/lib/server/ratelimit';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  // 分布式限流（优先 Redis）：AI 解读为高频高成本接口，按 IP 限频防止刷量
+  const rl = await rateLimit({ key: `rl:interpret:${getClientIp(req)}`, windowMs: 60_000, max: 15 });
+  if (!rl.success) {
+    return new Response('请求过于频繁，请稍后再试', { status: 429 });
+  }
+
   let body: { chart?: ZiweiChart; messages?: ChatMessage[] };
   try {
     body = await req.json();

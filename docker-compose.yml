@@ -4,8 +4,7 @@
 #   2) docker compose --env-file .env.production up -d --build
 #
 # 说明：
-#   - 当前 lib/db 为 JSON 文件、缓存/限流为内存态；postgres/redis 已就绪，
-#     待「部署指南·生产必做改造」完成后设置 DATABASE_URL / REDIS_URL 即生效。
+#   - lib/db 已支持 Prisma+Postgres；缓存/限流已支持 Redis。设置 DATABASE_URL / REDIS_URL 即生效。
 #   - 未切 PG 时 app 用 .data 卷持久化（单实例可用，多实例会不一致）。
 
 services:

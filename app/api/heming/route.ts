@@ -9,6 +9,7 @@
 import type { NextRequest } from 'next/server';
 import { streamChat, type ChatMessage } from '@/lib/server/llm';
 import { buildChartContext } from '@/lib/server/prompt';
+import { getClientIp, rateLimit } from '@/lib/server/ratelimit';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 
 export const runtime = 'nodejs';
@@ -31,6 +32,12 @@ const HEMING_SYSTEM = [
 ].join('\n');
 
 export async function POST(req: NextRequest) {
+  // 分布式限流（优先 Redis）：AI 解读为高频高成本接口，按 IP 限频防止刷量
+  const rl = await rateLimit({ key: `rl:heming:${getClientIp(req)}`, windowMs: 60_000, max: 8 });
+  if (!rl.success) {
+    return new Response('请求过于频繁，请稍后再试', { status: 429 });
+  }
+
   let body: { chartA?: ZiweiChart; chartB?: ZiweiChart; question?: string };
   try {
     body = await req.json();

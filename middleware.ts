@@ -1,17 +1,19 @@
 // middleware.ts
-// 限流与防刷：对高成本的 AI 解读 / 排盘接口按 IP 做滑动窗口频次限制，
-// 避免接口被白嫖。生产环境建议将计数迁移到 Redis（见 lib/server/cache.ts）。
+// 边缘层内存限流：作为无 Redis 单实例的兜底，并在有 Redis（生产多实例）时作为粗防护。
+// 精确分布式限流由 lib/server/ratelimit（Node 端 Redis）在每个 API route 内完成。
+// 为避免与 API 层精确限流双重计数影响正常用户，此处阈值放宽 2 倍，仅作边缘粗筛。
 import { NextRequest, NextResponse } from 'next/server';
 
-// 每个 IP 在窗口内的允许次数
+// 每个 IP 在窗口内的允许次数（×2 为边缘粗防护阈值，精确控制见 API 层）
+const MULT = 2;
 const LIMITS: Record<string, { windowMs: number; max: number }> = {
-  '/api/interpret': { windowMs: 60_000, max: 15 },
-  '/api/heming': { windowMs: 60_000, max: 8 },
-  '/api/fortune': { windowMs: 60_000, max: 8 },
-  '/api/chart': { windowMs: 60_000, max: 30 },
+  '/api/interpret': { windowMs: 60_000, max: 15 * MULT },
+  '/api/heming': { windowMs: 60_000, max: 8 * MULT },
+  '/api/fortune': { windowMs: 60_000, max: 8 * MULT },
+  '/api/chart': { windowMs: 60_000, max: 30 * MULT },
 };
 
-// 内存计数（演示用；多实例部署请用 Redis）
+// 内存计数（Edge runtime 无法使用 ioredis；生产精确限流见 lib/server/ratelimit）
 const hits = new Map<string, number[]>();
 
 export function middleware(req: NextRequest) {
