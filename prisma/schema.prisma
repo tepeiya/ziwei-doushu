@@ -1,0 +1,73 @@
+// 紫微斗数商业化站点 · 生产数据层（Postgres）
+// 由 lib/db/index.ts 使用；字段与 JSON 版数据形状保持一致，业务层无需改动。
+// 启用：npx prisma migrate dev（本地建表） / npx prisma migrate deploy（生产）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipPlan {
+  free
+  monthly
+  yearly
+}
+
+enum MembershipStatus {
+  active
+  expired
+  none
+}
+
+enum OrderStatus {
+  pending
+  paid
+  closed
+}
+
+model User {
+  id           String        @id @default(cuid())
+  identifier   String        @unique // 手机号或邮箱，登录账号
+  passwordHash String?
+  nickname     String?
+  createdAt    DateTime      @default(now())
+  memberships  Membership[]
+  charts       SavedChart[]
+  orders       Order[]
+}
+
+model Membership {
+  id        String           @id @default(cuid())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String           @unique
+  plan      MembershipPlan   @default(free)
+  status    MembershipStatus @default(none)
+  startedAt DateTime         @default(now())
+  expiresAt DateTime         @default(now())
+}
+
+model SavedChart {
+  id        String   @id @default(cuid())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?
+  birthInfo Json
+  chart     Json
+  title     String?
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id        String      @id @default(cuid())
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?
+  plan      String // 'monthly' | 'yearly' | 'single'
+  amount    Int // 单位：分
+  status    OrderStatus @default(pending)
+  channel   String? // 'wechat' | 'alipay' | 'sandbox'
+  createdAt DateTime    @default(now())
+  paidAt    DateTime?
+}

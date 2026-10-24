@@ -1,18 +1,34 @@
 /**
- * 轻量数据存储层
+ * 数据存储层（开发态 JSON + 生产态 Postgres 双实现）
  * ─────────────────────────────────────────────────────────────
- * 开发期：内存 + JSON 文件持久化（.data/db.json），零外部依赖即可跑通。
- * 生产期：将 DATABASE_URL 指向 Postgres，并改用 prisma/schema.prisma 中的模型
- *         （见文件底部「生产切换说明」）。本文件接口保持稳定，业务代码无需改动。
+ * - 未设置 DATABASE_URL：内存 + JSON 文件（.data/db.json），零外部依赖即可跑通。
+ * - 设置 DATABASE_URL：使用 Prisma + Postgres（见 prisma/schema.prisma）。
+ *
+ * 业务层（auth / pay / charts / profile）只依赖本文件导出的函数签名，无需改动。
+ *
+ * 首次启用 Postgres：
+ *   npm install                     # postinstall 自动 prisma generate
+ *   npx prisma migrate dev          # 本地建表（会生成 prisma/migrations）
+ *   # 生产环境用：npx prisma migrate deploy
  */
 import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-const DATA_DIR = path.join(process.cwd(), '.data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
+// Prisma client 延迟加载：未配置 DATABASE_URL 时绝不触碰（避免未生成 client 报错）。
+// 使用 require + any 是为了让「纯 JSON 模式」在无 DATABASE_URL 时也不依赖已生成的 client。
+type PrismaClientLike = any;
+let _prisma: PrismaClientLike | null = null;
+function getPrisma(): PrismaClientLike | null {
+  if (!process.env.DATABASE_URL) return null;
+  if (!_prisma) {
+    const { PrismaClient } = require('@prisma/client');
+    _prisma = new PrismaClient();
+  }
+  return _prisma;
+}
 
-// ─── 数据模型 ───────────────────────────────────────────────
+// ─── 数据模型（与 JSON 版保持一致，业务层依赖这些类型）───
 export type MembershipPlan = 'free' | 'monthly' | 'yearly';
 
 export interface User {
@@ -51,14 +67,7 @@ export interface Order {
   paidAt?: number;
 }
 
-interface DBShape {
-  users: User[];
-  memberships: Membership[];
-  charts: SavedChart[];
-  orders: Order[];
-}
-
-// ─── 密码哈希（演示用 scrypt，生产请接入专业 KMS/OAuth）─────────
+// ─── 密码哈希（演示用 scrypt；生产建议提高迭代轮数或接专业方案）───
 export function hashPassword(pwd: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(pwd, salt, 32).toString('hex');
@@ -72,7 +81,17 @@ export function verifyPassword(pwd: string, stored?: string): boolean {
   return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(cmp));
 }
 
-// ─── JSON 持久化 ─────────────────────────────────────────────
+// ─── JSON 持久化（DATABASE_URL 未设置时的 fallback）───
+const DATA_DIR = path.join(process.cwd(), '.data');
+const DB_FILE = path.join(DATA_DIR, 'db.json');
+
+interface DBShape {
+  users: User[];
+  memberships: Membership[];
+  charts: SavedChart[];
+  orders: Order[];
+}
+
 let cache: DBShape | null = null;
 
 async function load(): Promise<DBShape> {
@@ -95,8 +114,72 @@ function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${crypto.randomBytes(4).toString('hex')}`;
 }
 
+// ─── PG ↔ 业务类型转换（DateTime <-> 毫秒时间戳）───
+const toNum = (d: Date | null | undefined): number => (d ? d.getTime() : 0);
+function toUser(u: any): User {
+  return {
+    id: u.id,
+    identifier: u.identifier,
+    passwordHash: u.passwordHash ?? undefined,
+    nickname: u.nickname ?? undefined,
+    createdAt: toNum(u.createdAt),
+  };
+}
+function toMembership(m: any): Membership {
+  return {
+    userId: m.userId,
+    plan: m.plan,
+    status: m.status,
+    startedAt: toNum(m.startedAt),
+    expiresAt: toNum(m.expiresAt),
+  };
+}
+function toSavedChart(c: any): SavedChart {
+  return {
+    id: c.id,
+    userId: c.userId,
+    birthInfo: c.birthInfo,
+    chart: c.chart,
+    title: c.title ?? undefined,
+    createdAt: toNum(c.createdAt),
+  };
+}
+function toOrder(o: any): Order {
+  return {
+    id: o.id,
+    userId: o.userId,
+    plan: o.plan,
+    amount: o.amount,
+    status: o.status,
+    channel: o.channel ?? undefined,
+    createdAt: toNum(o.createdAt),
+    paidAt: toNum(o.paidAt),
+  };
+}
+
+const PLAN_DURATION: Record<string, number> = {
+  monthly: 30 * 24 * 3600 * 1000,
+  yearly: 365 * 24 * 3600 * 1000,
+};
+
 // ─── 用户 ───────────────────────────────────────────────────
-export async function createUser(identifier: string, password: string, nickname?: string): Promise<User> {
+export async function createUser(
+  identifier: string,
+  password: string,
+  nickname?: string,
+): Promise<User> {
+  const p = getPrisma();
+  if (p) {
+    const u = await p.user.create({
+      data: {
+        identifier,
+        passwordHash: hashPassword(password),
+        nickname: nickname || identifier,
+        createdAt: new Date(),
+      },
+    });
+    return toUser(u);
+  }
   const db = await load();
   if (db.users.some((u) => u.identifier === identifier)) {
     throw new Error('ACCOUNT_EXISTS');
@@ -114,22 +197,37 @@ export async function createUser(identifier: string, password: string, nickname?
 }
 
 export async function findUserByIdentifier(identifier: string): Promise<User | undefined> {
+  const p = getPrisma();
+  if (p) {
+    const u = await p.user.findUnique({ where: { identifier } });
+    return u ? toUser(u) : undefined;
+  }
   const db = await load();
   return db.users.find((u) => u.identifier === identifier);
 }
 
 export async function findUserById(id: string): Promise<User | undefined> {
+  const p = getPrisma();
+  if (p) {
+    const u = await p.user.findUnique({ where: { id } });
+    return u ? toUser(u) : undefined;
+  }
   const db = await load();
   return db.users.find((u) => u.id === id);
 }
 
 // ─── 会员 ───────────────────────────────────────────────────
-const PLAN_DURATION: Record<string, number> = {
-  monthly: 30 * 24 * 3600 * 1000,
-  yearly: 365 * 24 * 3600 * 1000,
-};
-
 export async function getMembership(userId: string): Promise<Membership> {
+  const p = getPrisma();
+  if (p) {
+    const m = await p.membership.findUnique({ where: { userId } });
+    if (!m) return { userId, plan: 'free', status: 'none', startedAt: 0, expiresAt: 0 };
+    if (m.status === 'active' && m.expiresAt.getTime() < Date.now()) {
+      const updated = await p.membership.update({ where: { userId }, data: { status: 'expired' } });
+      return toMembership(updated);
+    }
+    return toMembership(m);
+  }
   const db = await load();
   const m = db.memberships.find((x) => x.userId === userId);
   if (!m) return { userId, plan: 'free', status: 'none', startedAt: 0, expiresAt: 0 };
@@ -140,16 +238,35 @@ export async function getMembership(userId: string): Promise<Membership> {
   return m;
 }
 
-export async function activateMembership(userId: string, plan: 'monthly' | 'yearly'): Promise<Membership> {
-  const db = await load();
+export async function activateMembership(
+  userId: string,
+  plan: 'monthly' | 'yearly',
+): Promise<Membership> {
+  const p = getPrisma();
   const now = Date.now();
   const dur = PLAN_DURATION[plan] ?? PLAN_DURATION.monthly;
+  if (p) {
+    const existing = await p.membership.findUnique({ where: { userId } });
+    const base = existing ? Math.max(existing.expiresAt.getTime(), now) : now;
+    const data = {
+      plan,
+      status: 'active',
+      startedAt: new Date(now),
+      expiresAt: new Date(base + dur),
+    };
+    const m = await p.membership.upsert({
+      where: { userId },
+      create: { userId, ...data },
+      update: data,
+    });
+    return toMembership(m);
+  }
+  const db = await load();
   let m = db.memberships.find((x) => x.userId === userId);
   if (!m) {
     m = { userId, plan, status: 'active', startedAt: now, expiresAt: now + dur };
     db.memberships.push(m);
   } else {
-    // 续费：从当前到期时间或现在起算
     m.plan = plan;
     m.status = 'active';
     m.startedAt = now;
@@ -171,6 +288,18 @@ export async function saveChart(input: {
   chart: unknown;
   title?: string;
 }): Promise<SavedChart> {
+  const p = getPrisma();
+  if (p) {
+    const c = await p.savedChart.create({
+      data: {
+        userId: input.userId,
+        birthInfo: input.birthInfo as any,
+        chart: input.chart as any,
+        title: input.title,
+      },
+    });
+    return toSavedChart(c);
+  }
   const db = await load();
   const rec: SavedChart = {
     id: newId('c'),
@@ -186,6 +315,15 @@ export async function saveChart(input: {
 }
 
 export async function listCharts(userId: string, limit = 50): Promise<SavedChart[]> {
+  const p = getPrisma();
+  if (p) {
+    const rows = await p.savedChart.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    return rows.map(toSavedChart);
+  }
   const db = await load();
   return db.charts
     .filter((c) => c.userId === userId)
@@ -194,6 +332,11 @@ export async function listCharts(userId: string, limit = 50): Promise<SavedChart
 }
 
 export async function deleteChart(id: string, userId: string): Promise<boolean> {
+  const p = getPrisma();
+  if (p) {
+    const res = await p.savedChart.deleteMany({ where: { id, userId } });
+    return res.count > 0;
+  }
   const db = await load();
   const before = db.charts.length;
   db.charts = db.charts.filter((c) => !(c.id === id && c.userId === userId));
@@ -211,6 +354,19 @@ export async function createOrder(input: {
   amount: number;
   channel?: string;
 }): Promise<Order> {
+  const p = getPrisma();
+  if (p) {
+    const o = await p.order.create({
+      data: {
+        userId: input.userId,
+        plan: input.plan,
+        amount: input.amount,
+        channel: input.channel,
+        status: 'pending',
+      },
+    });
+    return toOrder(o);
+  }
   const db = await load();
   const order: Order = {
     id: newId('o'),
@@ -227,11 +383,29 @@ export async function createOrder(input: {
 }
 
 export async function getOrder(id: string): Promise<Order | undefined> {
+  const p = getPrisma();
+  if (p) {
+    const o = await p.order.findUnique({ where: { id } });
+    return o ? toOrder(o) : undefined;
+  }
   const db = await load();
   return db.orders.find((o) => o.id === id);
 }
 
 export async function markOrderPaid(id: string, channel?: string): Promise<Order | undefined> {
+  const p = getPrisma();
+  if (p) {
+    const o = await p.order.findUnique({ where: { id } });
+    if (!o || o.status === 'paid') return o ? toOrder(o) : undefined;
+    const updated = await p.order.update({
+      where: { id },
+      data: { status: 'paid', paidAt: new Date(), ...(channel ? { channel } : {}) },
+    });
+    if (updated.userId && (updated.plan === 'monthly' || updated.plan === 'yearly')) {
+      await activateMembership(updated.userId, updated.plan);
+    }
+    return toOrder(updated);
+  }
   const db = await load();
   const o = db.orders.find((x) => x.id === id);
   if (!o || o.status === 'paid') return o;
@@ -244,9 +418,3 @@ export async function markOrderPaid(id: string, channel?: string): Promise<Order
   }
   return o;
 }
-
-// ─── 生产切换说明 ───────────────────────────────────────────
-// 1) 安装 Prisma：`npm i prisma @prisma/client`，执行 `npx prisma migrate dev`。
-// 2) 以 prisma/schema.prisma 中的 User/Membership/Chart/Order 模型替换本文件内的
-//    数据结构，并保持上述导出函数签名不变，业务层（auth、pay、charts）无需改动。
-// 3) 用 DATABASE_URL + PrismaClient 实现 load/save 的各种 find/create/update。
