@@ -126,7 +126,7 @@ export default async function ChapterPage({ params }: { params: Promise<{ book: 
                   color: 'var(--tx-2)',
                   lineHeight: 1.8,
                 }}>
-                  <span style={{ fontSize: '10px', color: 'var(--ji)', marginRight: '6px' }}>倪师注</span>
+                  <span style={{ fontSize: '10px', color: 'var(--ji)', marginRight: '6px' }}>原注</span>
                   {p.niNote}
                 </div>
               )}

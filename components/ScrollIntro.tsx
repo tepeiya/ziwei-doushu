@@ -182,7 +182,7 @@ export default function ScrollIntro({ onComplete, skipLabel = '跳 过' }: Scrol
                   whiteSpace: 'nowrap',
                   opacity: 0.85,
                 }}>
-                  倪海厦《天纪》正宗体系
+                  传统紫微斗数正宗体系
                 </div>
 
                 {/* 朱砂方印 */}

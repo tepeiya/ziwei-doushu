@@ -3,6 +3,7 @@ import { useState } from 'react';
 import BirthForm from '@/components/BirthForm';
 import ChartBoard from '@/components/ChartBoard';
 import InsightPanel from '@/components/InsightPanel';
+import ChartActions from '@/components/ChartActions';
 import TimeNav, { type TimeView } from '@/components/TimeNav';
 import { generateChart } from '@/lib/ziwei/algorithm';
 import type { BirthInfo, ZiweiChart, Palace } from '@/lib/ziwei/types';
@@ -33,7 +34,22 @@ export default function ChartPage() {
           <br />
           （本页为引擎 Demo，完整商业版界面不在开源范围；排盘内核完全开放。）
         </p>
-        <BirthForm onSubmit={(info: BirthInfo) => setChart(generateChart(info))} />
+        <BirthForm
+          onSubmit={async (info: BirthInfo) => {
+            try {
+              const res = await fetch('/api/chart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(info),
+              });
+              if (!res.ok) throw new Error('chart api failed');
+              const data = await res.json();
+              setChart(data.chart);
+            } catch {
+              setChart(generateChart(info)); // 服务端不可用时降级到浏览器端排盘
+            }
+          }}
+        />
       </main>
     );
   }
@@ -59,6 +75,8 @@ export default function ChartPage() {
         onViewChange={setView}
         onYearChange={setLiunianYear}
       />
+
+      <ChartActions chart={chart} />
 
       <div
         style={{

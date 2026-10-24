@@ -1,6 +1,8 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { exportChartPdf } from '@/lib/exportPdf';
 import type { ZiweiChart, Palace } from '@/lib/ziwei/types';
 import type { TimeView } from './TimeNav';
 
@@ -38,7 +40,7 @@ const TOPIC_PROMPTS: Record<string, string> = {
 用一句话概括这个命盘的核心格局与命主气质。
 
 **【主星解读】**
-命宫主星的核心特质，引用倪海厦原话或观点。
+命宫主星的核心特质，引用传统紫微斗数原话或观点。
 
 **【三方四正】**
 财、官、迁三宫的联动分析及整体格局。
@@ -55,7 +57,7 @@ const TOPIC_PROMPTS: Record<string, string> = {
 一句话定性感情命格。
 
 **【夫妻宫分析】**
-夫妻宫主星、四化，以及倪海厦体系的具体解读。
+夫妻宫主星、四化，以及传统紫微斗数体系的具体解读。
 
 **【三方联动】**
 相关宫位对感情的影响。
@@ -72,7 +74,7 @@ const TOPIC_PROMPTS: Record<string, string> = {
 一句话定性事业命格，宜任职或宜创业。
 
 **【官禄宫分析】**
-官禄宫主星、四化，以及倪师对这种配置的判断。
+官禄宫主星、四化，以及传统技法对这种配置的判断。
 
 **【财帛宫联动】**
 财运与事业的关系，财路来源分析。
@@ -106,18 +108,20 @@ const TOPIC_PROMPTS: Record<string, string> = {
 疾厄宫星曜与健康含义。
 
 **【主要风险】**
-结合倪海厦子午流注理论，分析主要健康隐患与需关注的部位。
+结合传统紫微斗数子午流注理论，分析主要健康隐患与需关注的部位。
 
 **【大限健康走势】**
 当下健康趋势与关键时间段。
 
 **【预防建议】**
-具体注意事项与养生方向。`,
+具体注意事项与养生方向。
+
+注意：健康相关内容仅作传统养生文化角度的泛谈，不构成医疗建议，请以现代医学诊断为准。`,
 
   personality: `请深度解析性格特质，按以下结构输出：
 
 **【命宫主星性格】**
-命宫主星的核心性格特质，引用倪师原话。
+命宫主星的核心性格特质，引用传统技法原话。
 
 **【三方性格综合】**
 财、官、迁三宫对性格的影响，全貌描绘。
@@ -183,6 +187,7 @@ function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
 }
 
 export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: InsightPanelProps) {
+  const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -229,7 +234,7 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
 ${selectedPalace.name}在命盘中的意义，以及这种星曜配置的整体判断。
 
 **【主星解读】**
-主星在此宫的倪海厦体系解读，引用具体观点。
+主星在此宫的传统紫微斗数体系解读，引用具体观点。
 
 **【三方四正联动】**
 三方四正宫位对此宫的影响。
@@ -257,10 +262,10 @@ ${selectedPalace.name}在命盘中的意义，以及这种星曜配置的整体�
     const prompt = `请分析【${viewLabel}${selectedSiHua.starName}化${selectedSiHua.siHua}】的飞化影响，按以下结构输出：
 
 **【化${selectedSiHua.siHua}基本含义】**
-化${selectedSiHua.siHua}在倪海厦体系中的核心含义，以及${selectedSiHua.starName}化${selectedSiHua.siHua}的特殊含义。
+化${selectedSiHua.siHua}在传统紫微斗数体系中的核心含义，以及${selectedSiHua.starName}化${selectedSiHua.siHua}的特殊含义。
 
 **【落宫影响】**
-${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，该宫主管的领域受到何种影响，倪师如何解读。
+${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，该宫主管的领域受到何种影响，传统技法如何解读。
 
 **【三方四正飞化路径】**
 化${selectedSiHua.siHua}入${palaceName}后，对其三方四正（对宫、两个三合宫）的联动影响。
@@ -346,8 +351,28 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
     sendMessage(input);
   };
 
+  const exportPdf = () => {
+    const text = messages.filter((m) => m.role === 'assistant').map((m) => m.content).join('\n\n');
+    const b = chart.birthInfo;
+    const birth = b ? `${b.year}年${b.month}月${b.day}日` : '';
+    exportChartPdf({ name: '命主', birth, text });
+  };
+
   return (
     <div className="flex flex-col h-full rounded-xl overflow-hidden card-glass">
+
+      {/* ── 会员引导 ── */}
+      {session?.user ? (
+        <div className="flex-shrink-0 px-3 py-2 text-[10px]" style={{ background: 'rgba(212,168,67,0.06)', borderBottom: '1px solid var(--t-border)', color: 'var(--t-gold)' }}>
+          <span>已登录 · </span>
+          <a href="/pricing" style={{ textDecoration: 'underline' }}>开通会员解锁合盘 / 流年 / 命书 PDF</a>
+        </div>
+      ) : (
+        <div className="flex-shrink-0 px-3 py-2 flex items-center justify-between" style={{ background: 'rgba(212,168,67,0.08)', borderBottom: '1px solid var(--t-border)' }}>
+          <span className="text-[10px]" style={{ color: 'var(--t-gold)' }}>登录 / 开通会员，解锁合盘、流年与命书 PDF</span>
+          <a href="/login" className="text-[10px] px-2 py-1 rounded-lg" style={{ border: '1px solid rgba(212,168,67,0.3)', color: 'var(--t-gold)' }}>登录</a>
+        </div>
+      )}
 
       {/* ── Topic buttons ── */}
       <div className="flex-shrink-0 px-2 pt-2.5 pb-2" style={{ borderBottom: '1px solid var(--t-border)' }}>
@@ -434,6 +459,13 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
 
       {/* ── Input ── */}
       <div className="flex-shrink-0 px-3 pb-3 pt-2" style={{ borderTop: '1px solid var(--t-border)' }}>
+        <button
+          onClick={exportPdf}
+          className="w-full mb-2 text-[10px] py-1.5 rounded-lg transition-all"
+          style={{ border: '1px solid var(--t-border)', color: 'var(--t-faint)' }}
+        >
+          导出命书 PDF
+        </button>
         <div className="flex gap-2">
           <input
             type="text"

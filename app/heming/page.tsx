@@ -196,7 +196,7 @@ export default function HemingPage() {
             紫微合盘
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--tx-3)', lineHeight: 1.6 }}>
-            输入两个人的出生信息，AI 基于倪海厦体系分析双方命盘的缘分匹配度、感情走向与相处建议
+            输入两个人的出生信息，AI 基于传统紫微斗数体系分析双方命盘的缘分匹配度、感情走向与相处建议
           </p>
         </div>
 
@@ -244,7 +244,7 @@ export default function HemingPage() {
             <div style={{ textAlign: 'center', padding: '32px 0' }}>
               <div style={{ fontSize: '13px', color: 'var(--tx-3)', marginBottom: '24px', lineHeight: 1.7 }}>
                 填好双方出生信息后，点击下方按钮<br />
-                AI 将基于倪海厦体系深度分析两人缘分匹配度
+                AI 将基于传统紫微斗数体系深度分析两人缘分匹配度
               </div>
               <button
                 onClick={() => runAnalysis()}
