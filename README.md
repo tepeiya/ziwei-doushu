@@ -4,7 +4,7 @@
 
 ### 算法是公开的传统智慧，不应该被锁在围墙里
 
-[![CI](https://github.com/Renhuai123/ziwei-doushu/actions/workflows/ci.yml/badge.svg)](https://github.com/Renhuai123/ziwei-doushu/actions/workflows/ci.yml)
+[![CI](https://github.com/tepeiya/ziwei-doushu/actions/workflows/ci.yml/badge.svg)](https://github.com/tepeiya/ziwei-doushu/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](./LICENSE)
 [![Dataset: CC BY 4.0](https://img.shields.io/badge/dataset-CC%20BY%204.0-green.svg)](./DATASET-LICENSE)
 
@@ -120,7 +120,7 @@
 
 ## 二·新、13 维解读数据集 v4.0（2026-10-15）
 
-> **下载位置：本仓库右侧 [Releases → v4.0-13d](https://github.com/Renhuai123/ziwei-doushu/releases/tag/v4.0-13d)**
+> **下载位置：上游仓库右侧 [Releases → v4.0-13d](https://github.com/Renhuai123/ziwei-doushu/releases/tag/v4.0-13d)**
 
 v4.0 用 2026-10-15 版网站断语库重新生成：13 个分析维度的断语已按倪海厦《天纪》逐字稿与《紫微斗数全书》原文逐句校正——查不到出处的引文删去或换成逐字可查的原话（倪师原话注明《天纪》集数与时间码），不会发生的四化相关句子删去，有条件的断语写明条件。
 
@@ -179,7 +179,7 @@ shasum -a 256 -c SHA256SUMS.txt --ignore-missing # 校验
 
 ## 二、51.8 万命盘样本数据集
 
-> **下载位置：本仓库右侧 [Releases](https://github.com/Renhuai123/ziwei-doushu/releases/tag/v3.0-samples) 页面**
+> **下载位置：上游仓库右侧 [Releases](https://github.com/Renhuai123/ziwei-doushu/releases/tag/v3.0-samples) 页面**
 
 我们开源了一套完整的紫微斗数命盘样本数据集，覆盖 **51.8 万种排盘组合**（年 60 × 月 12 × 日 30 × 时 12 × 性别 2），每条样本包含完整的命盘结构和基于倪海厦体系的解读文本。
 
@@ -273,22 +273,28 @@ Expand-Archive combined.zip
 
 ---
 
-## 三、快速开始
+## 三、快速开始（本 fork）
 
 ```bash
-# 克隆
-git clone https://github.com/Renhuai123/ziwei-doushu.git
+# 克隆【本 fork】——注意是 tepeiya，不是上游 Renhuai123
+git clone https://github.com/tepeiya/ziwei-doushu.git
 cd ziwei-doushu
+
+# 切到改造分支：本 fork 的商业化 + 生产化成果都在 feature/commercialization
+# （fork 的 main 仍是上游旧内容，请勿直接基于 main 部署）
+git checkout feature/commercialization
 
 # 安装依赖
 npm install
 
-# 配置环境变量（只看排盘可以跳过；AI 配置仅在你自己实现了 /api/* 接口时才用得上）
+# 环境变量：开发用 .env.example，生产用 .env.production.example
 cp .env.example .env.local
 
 # 启动开发服务器
 npm run dev
 ```
+
+本 fork 相比上游**已内置后端 API 路由**：用户 / 会员 / 支付、AI 流式解读（`/api/interpret`）、合盘 AI 分析（`/api/heming`）、流年、年度运势等均已实现，不再需要你自己补接口。要让这些能力真正可用，需按 [第十一章](#十一商业化生产化改造本-fork-新增) 配置对应环境变量（如 `AI_PROVIDER` / `*_API_KEY`、`NEXTAUTH_SECRET`、`DATABASE_URL`、`REDIS_URL`、微信 / 支付宝商户号）。未配置时功能会优雅降级（如 AI 解读缺 Key 时给出提示、支付走沙箱）。
 
 本地验证：
 
@@ -297,9 +303,7 @@ npm run typecheck   # TypeScript 全量类型检查
 npm test            # 排盘引擎回归（768 盘 × 紫微铁律、夏令时、立春边界、红鸾天喜、样本时辰一致性、时辰序号边界、日期合法性、同宫双四化）
 ```
 
-每次 push 与 PR 都会在 GitHub Actions 上跑同一套（见 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）。
-
-> **注意：开源版不含后端 API 路由。**排盘、命盘展示、合盘起盘都在浏览器里用本仓库的引擎完成，**不需要任何 API Key**。AI 解读（`/api/interpret`）和合盘 AI 分析（`/api/heming`）需要你自己实现接口；没实现之前，这两处会直接提示「开源版不含该接口」，配置 API Key 也不会变成可用（#30 就是这个原因）。
+> **上生产别用上面的开发方式直接起**：见 [部署指南.md](./部署指南.md) 与[第十一章 11.4](#114-生产部署)，用 Docker / Vercel / PM2+Nginx 起服务，并切换到 Postgres + Redis。
 
 ---
 
@@ -379,6 +383,8 @@ npm test            # 排盘引擎回归（768 盘 × 紫微铁律、夏令时�
 **Demo 能跑通的**：出生信息表单、命盘方格与宫位详情、本命 / 大限 / 流年切换、古籍阅读器（全文搜索）、命理百科（14 主星 × 12 宫位）、亮暗主题、移动端适配。
 
 **Demo 里没有的**：线上重做过的交互界面、AI 流式解读、合盘图谱、分享卡片，以及**断语内容本身**（`db-analysis.ts` 是占位实现）。也就是说，Demo 画得出盘，但给不出线上那套解读。
+
+> **本 fork 补充**：上述「Demo 里没有的」能力（AI 流式解读、合盘、分享、年度运势、会员 / 支付等）在本 fork 的 `feature/commercialization` 分支已自行实现，详见[第十一章](#十一商业化生产化改造本-fork-新增)；但断语内容（`db-analysis.ts`）仍是占位，需自行接入解读数据。
 
 ---
 
