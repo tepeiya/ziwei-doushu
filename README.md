@@ -12,6 +12,8 @@
 
 </div>
 
+> **📌 关于本 fork（`tepeiya/ziwei-doushu`）**：本仓库在上方开源排盘引擎之上，叠加了一套**商业化 + 生产化**改造——用户 / 会员 / 支付、AI 流式解读、合盘 / 流年、年度运势、分享 PDF、SEO 页、AI 输出审查，以及 Prisma+Postgres / Redis / 强密码哈希 / 启动期密钥校验等生产加固。上游 README 的「开源边界 / 协议」章节仍然有效（倪师原话仍限非商用）。本 fork 的部署与改造清单见 [部署指南.md](./部署指南.md) 与[第十一章](#十一商业化生产化改造本-fork-新增)。
+
 **一、项目理念**：紫微斗数是中国传统命理学的瑰宝，倪海厦老师在《天纪》中系统梳理了正宗的紫微斗数体系。我们希望通过技术手段让更多人接触和学习这门学问。
 
 开源排盘算法和知识库，是因为我们相信：**算法是公开的传统智慧，不应该被锁在围墙里**。真正的价值在于解读的深度、用户体验的打磨、以及持续运营的积累。
@@ -49,6 +51,7 @@
 | 八 | [维护节奏与贡献](#八维护节奏与贡献) | 同步节奏、issue / PR 口径 |
 | 九 | [协议](#九协议) | 代码 MIT / 数据 CC BY 4.0 / 古籍公版 / 倪师原话非商用 |
 | 十 | [关于与联系](#十关于与联系) | 项目理念、技术栈、联系方式 |
+| 十一 | [商业化生产化改造（本 fork 新增）](#十一商业化生产化改造本-fork-新增) | 功能、架构、环境变量、部署、合规 |
 
 ---
 
@@ -427,3 +430,68 @@ npm test            # 排盘引擎回归（768 盘 × 紫微铁律、夏令时�
 - 线上平台：[metisziwei.com](https://metisziwei.com/?from=gh-readme)（已完成 ICP 备案：渝ICP备2026013379号-1）
 - 提问题、提修复：见 [CONTRIBUTING.md](./CONTRIBUTING.md)；使用交流请到 [讨论区](https://github.com/Renhuai123/ziwei-doushu/discussions)
 - 💕 发财的小手点一下：小红书 / 抖音 / 闲鱼 / X 关注 **王多鱼AI**，第一时间看上线 + 解锁更多紫微干货～
+
+---
+
+## 十一、商业化生产化改造（本 fork 新增）
+
+> 本章只描述本 fork（`tepeiya/ziwei-doushu`）在开源引擎之上新增的能力。上游 README 的「七、开源边界」「九、协议」仍然有效：倪海厦《天纪》原话仍为 CC BY-NC-SA（**非商用**），本 fork 已对相关内容做中性化改写、标注「无任何商业关联」，商业化使用时仍须遵守该许可。
+
+### 11.1 新增功能
+
+| 模块 | 说明 |
+|------|------|
+| 用户与会员 | 账号密码注册 / 登录（Auth.js v4，JWT session）、会员状态、命盘历史 |
+| 支付与套餐 | 月卡 / 年卡 / 单次套餐，沙箱模拟支付闭环，预留微信 / 支付宝商户号接入点 |
+| AI 流式解读 | `/api/interpret` SSE 流式输出，无 Key 时优雅降级 |
+| 合盘 / 流年 / 年度运势 | 双盘比对、流年分析、`/annual` 年度运势报告 + PDF 导出 |
+| 分享与 SEO | 分享海报、PDF 导出、`/seo` 下 182 个结构化内容页 |
+| AI 输出审查 | 软过滤（绝对化措辞中性化）+ 硬阻断（诈骗 / 医疗断言 / 高危绝对化）+ 免责尾注 + 审计钩子 |
+| 生产加固 | Prisma+Postgres 双数据层、Redis 缓存 / 限流、强参数密码哈希、启动期密钥校验 |
+
+### 11.2 架构与目录（新增部分）
+
+| 路径 | 作用 |
+|------|------|
+| `lib/auth.ts` | Auth.js 配置（Credentials + JWT） |
+| `lib/db/index.ts` | 数据层：设 `DATABASE_URL` 走 Prisma+Postgres，否则回退 JSON 文件 |
+| `lib/billing/index.ts` | 套餐 / 会员权益定义 |
+| `lib/server/{llm,prompt,moderation,cache,ratelimit,secrets}.ts` | AI 客户端、解读 prompt、审查管道、缓存、限流、密钥校验 |
+| `prisma/schema.prisma` | User / Membership / SavedChart / Order 四张表 |
+| `app/api/{auth,register,chart,interpret,heming,fortune,charts,pay}/*` | 业务接口 |
+| `app/{login,register,profile,pricing,pay,annual,fortune,seo}/*` | 页面 |
+| `middleware.ts` | Edge 粗防护（限流兜底） |
+| `instrumentation.ts` | 服务端启动钩子：校验生产密钥 |
+| `Dockerfile` / `docker-compose.yml` / `.env.production.example` / `部署指南.md` | 部署脚手架 |
+
+### 11.3 环境变量
+
+开发：`cp .env.example .env.local`；生产：`cp .env.production.example .env.production`。关键变量：
+
+| 变量 | 必填（生产） | 说明 |
+|------|------|------|
+| `NEXTAUTH_SECRET` | ✅ | 强随机，跨实例一致；占位值将被启动校验拦截（`openssl rand -base64 48`） |
+| `NEXTAUTH_URL` / `NEXT_PUBLIC_SITE_URL` | ✅ | 生产 HTTPS 域名 |
+| `AI_PROVIDER` / `*_API_KEY` / `OPENAI_*` | 用 AI 解读时 | OpenAI 兼容协议，缺省降级 |
+| `DATABASE_URL` | 切 PG 时 | `postgresql://user:pass@host:5432/db`；不设则回退 JSON |
+| `REDIS_URL` | 切 Redis 时 | `redis://host:6379`；不设则回退进程内内存 |
+| `WECHAT_*` / `ALIPAY_*` | 真实收款时 | 企业商户号；留空走沙箱 |
+| `PASSWORD_SCRYPT_COST` | 否 | 密码哈希成本（2^14~2^17，默认 16384） |
+| `MODERATION_*` | 否 | AI 审查词表开关 |
+
+### 11.4 生产部署
+
+完整步骤见 [部署指南.md](./部署指南.md)（三种方式：Docker 编排 / Vercel / PM2+Nginx）。要点：
+
+1. **数据层**：设 `DATABASE_URL` 后 `npx prisma migrate deploy` 建表，应用自动切 Postgres。
+2. **缓存 / 限流**：设 `REDIS_URL` 后自动切 Redis（多实例共享、重启不丢）。
+3. **密钥**：`NEXTAUTH_SECRET` 必须为强随机；生产启动会拒绝占位值。
+4. **构建运行**：`npm ci && npm run build && npm start`（Docker 已写好多阶段镜像）。
+
+### 11.5 合规与许可
+
+- 定位为「传统紫微斗数 / 文化娱乐」，全站显著免责，避免医疗、投资建议等表述。
+- 中国大陆运营须完成 **ICP 备案 + 公安备案**，经营性视属地口径办理许可证后再对公众收费。
+- 支付须走**企业商户号**（微信 / 支付宝），个人无法合规收款。
+- 倪师《天纪》相关品牌词已中性化、标注「无任何商业关联」；商业使用其原话仍受 CC BY-NC-SA（非商用）约束。
+- 数据集仍按上游 CC BY 4.0（商用须署名），详见 [DATASET-LICENSE](./DATASET-LICENSE)。
