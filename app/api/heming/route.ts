@@ -5,11 +5,13 @@
 //
 // 合规：仅使用紫微斗数通用技法（双宫联参、四化飞化、大限同步）与命盘数据，
 //       不引用倪海厦《天纪》原话（CC BY-NC-SA 禁止商用）。
+// 经 pipeModeratedStream 统一做「软过滤 + 硬阻断 + 免责尾注」审查。
 
 import type { NextRequest } from 'next/server';
-import { streamChat, type ChatMessage } from '@/lib/server/llm';
+import { type ChatMessage } from '@/lib/server/llm';
 import { buildChartContext } from '@/lib/server/prompt';
 import { getClientIp, rateLimit } from '@/lib/server/ratelimit';
+import { pipeModeratedStream } from '@/lib/server/moderation';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 
 export const runtime = 'nodejs';
@@ -65,18 +67,13 @@ export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      try {
-        for await (const delta of streamChat(conversation)) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: { text: delta } })}\n\n`));
-        }
-      } catch {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ delta: { text: '⚠️ 合盘分析生成中断，请稍后重试。' } })}\n\n`),
-        );
-      } finally {
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-        controller.close();
-      }
+      await pipeModeratedStream(conversation, controller, encoder, {
+        onComplete: (_full, report) => {
+          if (report.level !== 'safe') {
+            console.warn('[moderation:heming]', report.level, 'block=', report.blockHits, 'warn=', report.warnHits);
+          }
+        },
+      });
     },
   });
 

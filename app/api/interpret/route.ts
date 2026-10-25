@@ -3,11 +3,13 @@
 // 输入：{ chart: ZiweiChart, messages: {role, content}[] }
 // 输出：text/event-stream，每行 `data: {"delta":{"text":"..."}}`，结尾 `data: [DONE]`
 // 与前端 components/InsightPanel.tsx 的流式解析逻辑对齐。
+// 经 pipeModeratedStream 统一做「软过滤 + 硬阻断 + 免责尾注」审查。
 
 import type { NextRequest } from 'next/server';
-import { streamChat, type ChatMessage } from '@/lib/server/llm';
+import { type ChatMessage } from '@/lib/server/llm';
 import { buildSystemPrompt, buildChartContext } from '@/lib/server/prompt';
 import { getClientIp, rateLimit } from '@/lib/server/ratelimit';
+import { pipeModeratedStream } from '@/lib/server/moderation';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 
 export const runtime = 'nodejs';
@@ -44,22 +46,13 @@ export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      try {
-        for await (const delta of streamChat(conversation)) {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ delta: { text: delta } })}\n\n`),
-          );
-        }
-      } catch {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ delta: { text: '⚠️ 解读生成中断，请稍后重试。' } })}\n\n`,
-          ),
-        );
-      } finally {
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-        controller.close();
-      }
+      await pipeModeratedStream(conversation, controller, encoder, {
+        onComplete: (_full, report) => {
+          if (report.level !== 'safe') {
+            console.warn('[moderation:interpret]', report.level, 'block=', report.blockHits, 'warn=', report.warnHits);
+          }
+        },
+      });
     },
   });
 
