@@ -67,18 +67,71 @@ export interface Order {
   paidAt?: number;
 }
 
-// ─── 密码哈希（演示用 scrypt；生产建议提高迭代轮数或接专业方案）───
-export function hashPassword(pwd: string): string {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(pwd, salt, 32).toString('hex');
-  return `${salt}:${hash}`;
+// ─── 密码哈希（scrypt，强参数 + 版本化格式，可平滑升级成本）───
+// 存储格式： scrypt$<N>$<r>$<p>$<saltHex>$<hashHex>
+// 默认 N=16384（scrypt 标准「交互级」参数，抗暴力破解且单次耗时可控），
+// 可通过 PASSWORD_SCRYPT_COST 调高（2^14~2^17，自动取最接近的 2 的幂）；
+// 高成本时显式设置 maxmem，避免触及 Node 默认内存上限。
+// 旧开发态 salt:hash 格式在 verify 时回退兼容；verify 改为异步，避免阻塞事件循环。
+const SCRYPT_KEYLEN = 32;
+
+function scryptOpts(): crypto.ScryptOptions {
+  const raw = parseInt(process.env.PASSWORD_SCRYPT_COST || '', 10);
+  let N = Number.isFinite(raw) && raw >= 16384 ? raw : 16384;
+  N = Math.min(131072, Math.max(16384, N));
+  N = 2 ** Math.round(Math.log2(N)); // scrypt 要求 N 为 2 的幂
+  const r = 8;
+  const p = 1;
+  const maxmem = 128 * N * r * p * 2 + 64 * 1024; // 留足内存上限，支持更高成本
+  return { N, r, p, maxmem };
 }
 
-export function verifyPassword(pwd: string, stored?: string): boolean {
-  if (!stored || !stored.includes(':')) return false;
-  const [salt, hash] = stored.split(':');
-  const cmp = crypto.scryptSync(pwd, salt, 32).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(cmp));
+function scryptAsync(
+  pwd: string,
+  salt: Buffer,
+  opts?: crypto.ScryptOptions,
+): Promise<Buffer> {
+  const o = opts ?? scryptOpts();
+  return new Promise((resolve, reject) =>
+    crypto.scrypt(pwd, salt, SCRYPT_KEYLEN, o, (err, derived) =>
+      err ? reject(err) : resolve(derived),
+    ),
+  );
+}
+
+export async function hashPassword(pwd: string): Promise<string> {
+  const { N, r, p } = scryptOpts();
+  const salt = crypto.randomBytes(16);
+  const hash = await scryptAsync(pwd, salt);
+  return `scrypt$${N}$${r}$${p}$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+export async function verifyPassword(pwd: string, stored?: string): Promise<boolean> {
+  if (!stored) return false;
+  // 兼容开发态旧格式 salt:hash
+  if (stored.includes(':') && !stored.startsWith('scrypt$')) {
+    const [salt, hash] = stored.split(':');
+    try {
+      const cmp = crypto.scryptSync(pwd, salt, SCRYPT_KEYLEN);
+      return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), cmp);
+    } catch {
+      return false;
+    }
+  }
+  const parts = stored.split('$');
+  if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
+  const N = Number(parts[1]);
+  const r = Number(parts[2]);
+  const p = Number(parts[3]);
+  const salt = Buffer.from(parts[4], 'hex');
+  const hash = Buffer.from(parts[5], 'hex');
+  if (![N, r, p].every(Number.isFinite) || !salt.length || !hash.length) return false;
+  try {
+    const cmp = await scryptAsync(pwd, salt, { N, r, p, maxmem: 128 * N * r * p * 2 + 64 * 1024 });
+    return crypto.timingSafeEqual(hash, cmp);
+  } catch {
+    return false;
+  }
 }
 
 // ─── JSON 持久化（DATABASE_URL 未设置时的 fallback）───
@@ -173,7 +226,7 @@ export async function createUser(
     const u = await p.user.create({
       data: {
         identifier,
-        passwordHash: hashPassword(password),
+        passwordHash: await hashPassword(password),
         nickname: nickname || identifier,
         createdAt: new Date(),
       },
@@ -187,7 +240,7 @@ export async function createUser(
   const user: User = {
     id: newId('u'),
     identifier,
-    passwordHash: hashPassword(password),
+    passwordHash: await hashPassword(password),
     nickname: nickname || identifier,
     createdAt: Date.now(),
   };

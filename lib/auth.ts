@@ -6,6 +6,10 @@
 import type { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { findUserByIdentifier, verifyPassword } from '@/lib/db';
+import { validateSecrets } from '@/lib/server/secrets';
+
+// 生产环境密钥校验（开发态仅告警；构建期自动跳过，不阻断打包）。
+validateSecrets();
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt' },
@@ -21,7 +25,7 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.identifier || !credentials?.password) return null;
         const user = await findUserByIdentifier(credentials.identifier.trim());
         if (!user || !user.passwordHash) return null;
-        const ok = verifyPassword(credentials.password, user.passwordHash);
+        const ok = await verifyPassword(credentials.password, user.passwordHash);
         if (!ok) return null;
         return {
           id: user.id,
