@@ -21,6 +21,13 @@
 >
 > 上游 README 的「七、开源边界」「九、协议」仍然有效：倪海厦《天纪》原话仍限非商用，本 fork 已对相关内容做中性化改写并标注「无任何商业关联」。详见[第十一章](#十一商业化生产化改造本-fork-新增)。
 
+> **2026-10-26 补充（本 fork）**：在 `feature/commercialization` 分支完成**前端重写 + 移动端适配**，已通过 `tsc`（0 错误）与 `next build`（231 个静态页全部生成）。要点——
+> - **补全墨金设计系统**：新增 `--t-*` 设计令牌与 `.card-glass` / `.card-inner` 卡片类，使 `ChartBoard` / `InsightPanel` / `StarDetailPanel` / `PatternsCard` / `ChartSummary` / `TimeNav` / `PalaceCell` / `FamousPersonCard` / `ChatPanel` 共 9 个富组件恢复正确渲染；新增 `.with-tabbar` 工具类（移动端底部安全区内边距，md+ 复位）。
+> - **统一导航壳 `SiteNav`**：桌面 sticky 顶栏（排盘 / 合盘 / 流年 / 年运 / 知识库 / 古籍库 + 主题切换 + 登录 / 我的）；移动端固定底部 Tab 栏（首页 / 排盘 / 合盘 / 知识 / 我的）；首页传 `header={false}` 仅显示底栏。
+> - **重写 `/chart` 命盘工作台**：接入真实 `/api/chart`（含浏览器端 `generateChart` 兜底）、大限流年 `TimeNav`、AI 解读 `InsightPanel`（六维度 + 自由追问 + PDF 导出）、格局识别 `PatternsCard`、`/api/charts` 命盘存档，替换旧开源 Demo 占位。
+> - **全站移动端适配**：合盘 / 流年 / 年运 / 知识库 / 古籍库 / 登录注册 / 我的 / 定价 / 支付 / 关于 / 隐私 / 条款 / 古籍章节 / 搜索 / SEO 落地页 / 预览页统一接入 `SiteNav` + `with-tabbar`，并移除旧版「开源版不含此接口」误导文案。
+> - **构建期阻断修复**：`lib/ziwei/patterns.ts` 移除多余 `server-only`（纯计算模块，供客户端组件复用）；新增客户端 `components/Providers.tsx` 注入 `SessionProvider`，修复 `useSession` 在静态预渲染期的崩溃。
+
 **一、项目理念**：紫微斗数是中国传统命理学的瑰宝，倪海厦老师在《天纪》中系统梳理了正宗的紫微斗数体系。我们希望通过技术手段让更多人接触和学习这门学问。
 
 开源排盘算法和知识库，是因为我们相信：**算法是公开的传统智慧，不应该被锁在围墙里**。真正的价值在于解读的深度、用户体验的打磨、以及持续运营的积累。
@@ -384,7 +391,7 @@ npm test            # 排盘引擎回归（768 盘 × 紫微铁律、夏令时�
 
 **Demo 里没有的**：线上重做过的交互界面、AI 流式解读、合盘图谱、分享卡片，以及**断语内容本身**（`db-analysis.ts` 是占位实现）。也就是说，Demo 画得出盘，但给不出线上那套解读。
 
-> **本 fork 补充**：上述「Demo 里没有的」能力（AI 流式解读、合盘、分享、年度运势、会员 / 支付等）在本 fork 的 `feature/commercialization` 分支已自行实现，详见[第十一章](#十一商业化生产化改造本-fork-新增)；但断语内容（`db-analysis.ts`）仍是占位，需自行接入解读数据。
+> **本 fork 补充**：上述「Demo 里没有的」能力（AI 流式解读、合盘、分享、年度运势、会员 / 支付等）在本 fork 的 `feature/commercialization` 分支均已实现；**前端也已重写并适配移动端**（统一导航壳 `SiteNav`、移动端底部 Tab 栏、`/chart` 命盘工作台接入真实 API、9 个富组件恢复渲染），详见[第十一章 11.6](#116-前端重写与移动端适配本-fork-新增) 与上方的 2026-10-26 补充；但断语内容（`db-analysis.ts`）仍是占位，需自行接入解读数据。
 
 ---
 
@@ -434,7 +441,7 @@ npm test            # 排盘引擎回归（768 盘 × 紫微铁律、夏令时�
 
 - **框架**：Next.js 16（App Router）
 - **语言**：TypeScript
-- **样式**：Tailwind CSS + CSS Variables 设计系统
+- **样式**：Tailwind CSS + CSS Variables「墨金」设计系统（含 `--t-*` 令牌、`.card-glass`、`.with-tabbar` 移动端适配）
 - **排盘**：基于 [iztro](https://github.com/SylarLong/iztro) + lunar-javascript
 - **动画**：Framer Motion
 
@@ -508,3 +515,18 @@ npm test            # 排盘引擎回归（768 盘 × 紫微铁律、夏令时�
 - 支付须走**企业商户号**（微信 / 支付宝），个人无法合规收款。
 - 倪师《天纪》相关品牌词已中性化、标注「无任何商业关联」；商业使用其原话仍受 CC BY-NC-SA（非商用）约束。
 - 数据集仍按上游 CC BY 4.0（商用须署名），详见 [DATASET-LICENSE](./DATASET-LICENSE)。
+
+### 11.6 前端重写与移动端适配（本 fork 新增）
+
+本 fork 在 `feature/commercialization` 分支完成前端重写（提交 `81d30f6`，2026-10-26），让既有富组件与真实后端 API 真正落地，并做到移动端可用。
+
+| 改动 | 说明 |
+|------|------|
+| 设计系统 | `app/globals.css` 新增 `--t-*` 设计令牌（映射 `--bg-*/--tx-*/--ac`）与 `.card-glass` / `.card-inner` 卡片类，9 个富组件恢复渲染；新增 `.with-tabbar` 移动端安全区内边距工具类 |
+| 统一导航 `components/SiteNav.tsx` | 桌面顶栏 + 移动端底部 Tab 栏；传 `header={false}` 时仅渲染底栏（用于带自有 Hero 的首页） |
+| 命盘工作台 `app/chart/page.tsx` | 重写为接入真实 `/api/chart` 的工作台：大限流年 `TimeNav`、AI 解读 `InsightPanel`、格局 `PatternsCard`、命盘存档 `/api/charts` |
+| 全站接入导航 | 合盘 / 流年 / 年运 / 知识库 / 古籍库 / 登录注册 / 我的 / 定价 / 支付 / 静态页 / 古籍章节 / 搜索 / SEO / 预览页统一包 `with-tabbar` + `<SiteNav />`，并移除旧版「开源版不含此接口」误导文案 |
+| 会话上下文 `components/Providers.tsx` | 客户端边界注入 `SessionProvider`（`useSession` 在 App Router 下必需），在 `app/layout.tsx` 挂载 |
+| 构建修复 | 移除 `lib/ziwei/patterns.ts` 多余 `server-only`（纯计算，供客户端复用） |
+
+**验证**：`npx tsc --noEmit` 0 错误；`npx next build` 成功，生成 231 个静态页面（含 182 个 SEO 落地页、古籍章节等），API 路由全部就绪。
