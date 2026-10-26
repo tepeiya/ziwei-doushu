@@ -136,6 +136,29 @@ body {
   .with-tabbar { padding-bottom: 0; }
 }
 
+/* 无障碍：键盘焦点可见 + 跳转链接 */
+:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.skip-link {
+  position: fixed;
+  top: -60px;
+  left: 12px;
+  z-index: 200;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--bg-0);
+  color: var(--ac);
+  border: 1px solid var(--bdr);
+  transition: top 0.2s ease;
+  text-decoration: none;
+}
+.skip-link:focus {
+  top: 12px;
+}
+
 /* 卡片 */
 .card {
   background: var(--bg-card);

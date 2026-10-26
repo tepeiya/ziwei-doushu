@@ -3,9 +3,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import BirthForm from '@/components/BirthForm';
-import ChartBoard from '@/components/ChartBoard';
-import InsightPanel from '@/components/InsightPanel';
-import StarDetailPanel from '@/components/StarDetailPanel';
+// 重组件路由级代码分割：ChartBoard / InsightPanel 体积较大，按需懒加载减小首屏包体
+import dynamic from 'next/dynamic';
+const ChartBoard = dynamic(() => import('@/components/ChartBoard'), {
+  ssr: false,
+  loading: () => <div style={{ padding: 24, color: 'var(--tx-2)' }}>命盘加载中…</div>,
+});
+const InsightPanel = dynamic(() => import('@/components/InsightPanel'), {
+  ssr: false,
+  loading: () => <div style={{ padding: 24, color: 'var(--tx-2)' }}>解读面板加载中…</div>,
+});
+const StarDetailPanel = dynamic(() => import('@/components/StarDetailPanel'), { ssr: false });
 import ChartActions from '@/components/ChartActions';
 import PatternsCard from '@/components/PatternsCard';
 import ChartSummary from '@/components/ChartSummary';
@@ -56,7 +64,12 @@ export default function ChartPage() {
       const data = await res.json();
       setChart(data.chart);
     } catch {
-      setChart(generateChart(info)); // 服务端不可用时降级到浏览器端排盘
+      // 客户端兜底：绕过 /api/chart 的缓存、限流与审计，直接在浏览器排盘。
+      // 行为差异：无服务端缓存命中、不计入分布式限流、无审计日志——仅作可用性兜底。
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[chart] /api/chart 不可用，已降级到浏览器端 generateChart 兜底（绕过缓存/限流）');
+      }
+      setChart(generateChart(info));
     } finally {
       setLoading(false);
     }

@@ -121,7 +121,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
   const summaryText = showSummary
     ? [
         `${y}年${m}月${d}日`,
-        form.city || (form.province ? form.province : ''),
+        form.province === 'overseas' ? '海外' : (form.city || (form.province ? form.province : '')),
         form.unknownTime ? '时辰不详' : `${SHICHEN_NAMES[branch]}时`,
         form.gender === 'male' ? '男' : '女',
       ].filter(Boolean).join(' · ')
@@ -246,6 +246,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
           <div>
             <select
               value={form.year}
+              aria-label="出生年份"
               onChange={e => { setForm({ ...form, year: e.target.value }); setTouched(t => ({ ...t, year: true })); }}
               style={showErr('year') && errors.year ? errorInputStyle : inputStyle}
               required
@@ -260,6 +261,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
           <div>
             <select
               value={form.month}
+              aria-label="出生月份"
               onChange={e => { setForm({ ...form, month: e.target.value }); setTouched(t => ({ ...t, month: true })); }}
               style={showErr('month') && errors.month ? errorInputStyle : inputStyle}
               required
@@ -274,6 +276,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
           <div>
             <select
               value={form.day}
+              aria-label="出生日期"
               onChange={e => { setForm({ ...form, day: e.target.value }); setTouched(t => ({ ...t, day: true })); }}
               style={showErr('day') && errors.day ? errorInputStyle : inputStyle}
               required
@@ -294,29 +297,47 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
           <select
             value={form.province}
+            aria-label="出生省份或地区"
             onChange={e => handleProvince(e.target.value)}
             style={inputStyle}
             onFocus={e => { e.target.style.borderColor = focusBorder; }}
             onBlur={e => { e.target.style.borderColor = inputBorder; }}
           >
             <option value="">省份 / 直辖市</option>
+            <option value="overseas">🌏 海外 / 自定义经度</option>
             {PROVINCES.map(p => (
               <option key={p.name} value={p.name}>{p.name}</option>
             ))}
           </select>
-          <select
-            value={form.city}
-            onChange={e => handleCity(e.target.value)}
-            disabled={!form.province}
-            style={{ ...inputStyle, opacity: form.province ? 1 : 0.45 }}
-            onFocus={e => { e.target.style.borderColor = focusBorder; }}
-            onBlur={e => { e.target.style.borderColor = inputBorder; }}
-          >
-            <option value="">{form.province ? '城市' : '先选省份'}</option>
-            {cityList.map(c => (
-              <option key={c.name} value={c.name}>{c.name}</option>
-            ))}
-          </select>
+          {form.province === 'overseas' ? (
+            <input
+              type="number"
+              min={-180}
+              max={180}
+              step={0.1}
+              value={form.longitude}
+              onChange={e => setForm({ ...form, longitude: parseFloat(e.target.value) || 0 })}
+              placeholder="出生地经度（如 139.7 东京 / -77.0 纽约）"
+              style={inputStyle}
+              onFocus={e => { e.target.style.borderColor = focusBorder; }}
+              onBlur={e => { e.target.style.borderColor = inputBorder; }}
+            />
+          ) : (
+            <select
+              value={form.city}
+            aria-label="出生城市"
+              onChange={e => handleCity(e.target.value)}
+              disabled={!form.province}
+              style={{ ...inputStyle, opacity: form.province ? 1 : 0.45 }}
+              onFocus={e => { e.target.style.borderColor = focusBorder; }}
+              onBlur={e => { e.target.style.borderColor = inputBorder; }}
+            >
+              <option value="">{form.province ? '城市' : '先选省份'}</option>
+              {cityList.map(c => (
+                <option key={c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          )}
         </div>
         <AnimatePresence mode="wait">
           {form.province ? (
@@ -327,7 +348,9 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
               exit={{ opacity: 0 }}
               style={{ fontSize: '10px', color: isDark ? 'rgba(180,210,235,0.85)' : 'rgba(100,70,10,0.5)', marginTop: '5px' }}
             >
-              {form.city || '（请选择城市）'} · 经度 {form.longitude.toFixed(1)}°E · 时差 {offsetMin > 0 ? '+' : ''}{offsetMin} 分钟
+              {form.province === 'overseas'
+                ? `海外 · 经度 ${form.longitude.toFixed(1)}°E · 时差 ${offsetMin > 0 ? '+' : ''}${offsetMin} 分钟`
+                : `${form.city || '（请选择城市）'} · 经度 ${form.longitude.toFixed(1)}°E · 时差 ${offsetMin > 0 ? '+' : ''}${offsetMin} 分钟`}
             </motion.p>
           ) : (
             <motion.p
@@ -350,6 +373,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
             <select
               value={form.clockHour}
+              aria-label="出生小时（北京时间）"
               onChange={e => setForm({ ...form, clockHour: e.target.value })}
               style={inputStyle}
             >
@@ -359,6 +383,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
             </select>
             <select
               value={form.clockMinute}
+              aria-label="出生分钟（北京时间）"
               onChange={e => setForm({ ...form, clockMinute: e.target.value })}
               style={inputStyle}
             >

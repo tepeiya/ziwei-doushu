@@ -6,6 +6,7 @@ import Disclaimer from '@/components/Disclaimer';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { SITE_URL } from '@/lib/site';
+import { LocaleProvider } from '@/lib/i18n';
 
 export const metadata: Metadata = {
   title: '紫微命盘 · 传统紫微斗数排盘与解读',
@@ -45,9 +46,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('ziwei-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);else document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();` }} />
       </head>
       <body className="min-h-screen">
+        <a href="#main-content" className="skip-link">跳到主内容</a>
         <ThemeProvider>
           <Providers>
-            {children}
+            <LocaleProvider>
+              <div id="main-content" tabIndex={-1} style={{ outline: 'none' }}>
+                {children}
+              </div>
+            </LocaleProvider>
           </Providers>
           <Disclaimer />
         </ThemeProvider>

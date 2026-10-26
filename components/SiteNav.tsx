@@ -4,24 +4,25 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useTheme } from '@/components/ThemeProvider';
+import { useT } from '@/lib/i18n';
 
 /** 顶部横向导航（桌面端） */
 const NAV_LINKS = [
-  { href: '/chart', label: '排盘' },
-  { href: '/heming', label: '合盘' },
-  { href: '/fortune', label: '流年' },
-  { href: '/annual', label: '年运' },
-  { href: '/knowledge', label: '知识库' },
-  { href: '/library', label: '古籍库' },
+  { href: '/chart', key: 'nav.chart' },
+  { href: '/heming', key: 'nav.heming' },
+  { href: '/fortune', key: 'nav.fortune' },
+  { href: '/annual', key: 'nav.annual' },
+  { href: '/knowledge', key: 'nav.knowledge' },
+  { href: '/library', key: 'nav.library' },
 ];
 
 /** 底部 Tab 栏（移动端） */
 const TAB_LINKS = [
-  { href: '/', label: '首页', glyph: '⌂' },
-  { href: '/chart', label: '排盘', glyph: '☯' },
-  { href: '/heming', label: '合盘', glyph: '❤' },
-  { href: '/knowledge', label: '知识', glyph: '✿' },
-  { href: '/profile', label: '我的', glyph: '☻' },
+  { href: '/', key: 'nav.home', glyph: '⌂' },
+  { href: '/chart', key: 'nav.chart', glyph: '☯' },
+  { href: '/heming', key: 'nav.heming', glyph: '❤' },
+  { href: '/knowledge', key: 'nav.knowledge', glyph: '✿' },
+  { href: '/profile', key: 'nav.profile', glyph: '☻' },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -55,6 +56,7 @@ export default function SiteNav({ header = true }: { header?: boolean }) {
   const pathname = usePathname();
   const { status } = useSession();
   const authed = status === 'authenticated';
+  const t = useT();
 
   return (
     <>
@@ -75,13 +77,14 @@ export default function SiteNav({ header = true }: { header?: boolean }) {
           <span className="font-semibold tracking-[0.2em]" style={{ color: 'var(--tx-0)', fontSize: 14 }}>紫微命盘</span>
         </Link>
 
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-1" aria-label="主导航">
           {NAV_LINKS.map((l) => {
             const active = isActive(pathname, l.href);
             return (
               <Link
                 key={l.href}
                 href={l.href}
+                aria-current={active ? 'page' : undefined}
                 className="px-3 py-1.5 rounded-full text-[13px] transition-colors"
                 style={{
                   textDecoration: 'none',
@@ -90,7 +93,7 @@ export default function SiteNav({ header = true }: { header?: boolean }) {
                   fontWeight: active ? 600 : 400,
                 }}
               >
-                {l.label}
+                {t(l.key)}
               </Link>
             );
           })}
@@ -132,6 +135,7 @@ export default function SiteNav({ header = true }: { header?: boolean }) {
       {/* ══ 移动端底部 Tab 栏 ══ */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 md:hidden flex items-stretch justify-around border-t"
+        aria-label="底部导航"
         style={{
           background: 'color-mix(in srgb, var(--bg-0) 94%, transparent)',
           backdropFilter: 'blur(18px)',
@@ -140,17 +144,18 @@ export default function SiteNav({ header = true }: { header?: boolean }) {
           paddingBottom: 'env(safe-area-inset-bottom)',
         }}
       >
-        {TAB_LINKS.map((t) => {
-          const active = isActive(pathname, t.href);
+        {TAB_LINKS.map((tab) => {
+          const active = isActive(pathname, tab.href);
           return (
             <Link
-              key={t.href}
-              href={t.href}
+              key={tab.href}
+              href={tab.href}
+              aria-current={active ? 'page' : undefined}
               className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2"
               style={{ textDecoration: 'none', color: active ? 'var(--t-gold)' : 'var(--tx-3)' }}
             >
-              <span style={{ fontSize: 18, lineHeight: 1 }}>{t.glyph}</span>
-              <span style={{ fontSize: 10 }}>{t.label}</span>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>{tab.glyph}</span>
+              <span style={{ fontSize: 10 }}>{t(tab.key)}</span>
             </Link>
           );
         })}

@@ -1164,7 +1164,7 @@ export default function HomePage() {
                   </div>
                   <div className="text-[9px] tracking-wider"
                     style={{ color: ready ? '#10b981' : c.textMuted }}>
-                    {ready ? '✓ 已上线' : `${s.when} 开放`}
+                    {ready ? '✓ 已上线' : `规划中 · ${s.when}`}
                   </div>
                 </a>
               );
