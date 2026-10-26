@@ -6,6 +6,7 @@ import { formToBirthInfo } from '@/lib/ziwei/share';
 import { generateChart as buildChart } from '@/lib/ziwei/algorithm';
 import type { BirthInfo, ZiweiChart } from '@/lib/ziwei/types';
 import { useTheme } from '@/components/ThemeProvider';
+import SiteNav from '@/components/SiteNav';
 
 // ─── AiContent 渲染器（与 InsightPanel 一致）────────────────
 function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
@@ -161,30 +162,8 @@ export default function HemingPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-0)' }}>
-      {/* 顶栏 */}
-      <header style={{
-        position: 'sticky', top: 0, zIndex: 50,
-        background: isDark ? 'rgba(2,8,16,0.88)' : 'rgba(250,245,235,0.92)',
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        borderBottom: '1px solid var(--bdr)',
-        display: 'flex', alignItems: 'center', padding: '0 24px', height: '52px', gap: '16px',
-      }}>
-        <button
-          onClick={() => router.push('/')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px',
-            color: 'var(--tx-3)', background: 'none', border: 'none', cursor: 'pointer',
-          }}
-        >
-          <span style={{ fontSize: '16px' }}>‹</span>
-          <span>返回</span>
-        </button>
-        <div style={{ width: '1px', height: '20px', background: 'var(--bdr-med)' }} />
-        <span style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.2em' }}>合盘分析</span>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontSize: '11px', color: 'var(--tx-3)' }}>感情 · 合伙 · 亲子 · 朋友</span>
-      </header>
+    <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)' }}>
+      <SiteNav />
 
       {/* 主体 */}
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '32px 24px 80px' }}>
@@ -285,7 +264,7 @@ export default function HemingPage() {
           {analysisError && (
             <div style={{ padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--bdr)', background: 'var(--bg-card)', fontSize: '13px', color: 'var(--tx-2)', marginTop: '12px' }}>
               {apiMissing
-                ? '开源版不含合盘 AI 分析接口（/api/heming），需要你自己实现后才能用。两人的命盘可以分别到「排盘」页（/chart）查看。'
+                ? 'AI 合盘服务暂未配置（/api/heming），请稍后重试。两人的命盘可分别到「排盘」页查看。'
                 : '分析暂时不可用，请重试。'}
             </div>
           )}

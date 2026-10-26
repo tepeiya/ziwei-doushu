@@ -4,6 +4,7 @@
  */
 
 import Link from 'next/link';
+import SiteNav from '@/components/SiteNav';
 import { ALL_STARS, ALL_TOPICS, getKnowledge, STAR_BRIEF_SEO, STAR_TO_SLUG } from '@/lib/seo/knowledge';
 import { TOPIC_LABEL } from '@/lib/ziwei/db-analysis';
 
@@ -17,21 +18,8 @@ export default function KnowledgeHomePage() {
   const STAR_DESCRIPTIONS_QUICK = STAR_BRIEF_SEO;
 
   return (
-    <div style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
-      {/* 顶栏 */}
-      <div className="px-6 py-4 flex items-center justify-between"
-        style={{ borderBottom: '1px solid rgba(184,146,42,0.15)', background: 'var(--bg-page)' }}>
-        <Link href="/" style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.3em', textDecoration: 'none' }}>
-          ← 首页
-        </Link>
-        <div style={{ fontSize: '12px', color: 'var(--tx-3)', letterSpacing: '0.2em' }}>
-          传统方法论 · 知识库
-        </div>
-        <Link href="/library" style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.2em', textDecoration: 'none' }}>
-          古籍 →
-        </Link>
-      </div>
-
+    <div className="with-tabbar" style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+      <SiteNav />
       {/* Hero */}
       <div className="text-center px-6 py-14">
         <div className="flex items-center justify-center gap-3 mb-4">

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import SiteNav from '@/components/SiteNav';
 import ScrollIntro from '@/components/ScrollIntro';
 
 export default function PreviewPage() {
@@ -17,6 +18,8 @@ export default function PreviewPage() {
 
       {/* 动画结束后的「样片说明 + 操作按钮」面板 */}
       {done && (
+        <div className="with-tabbar">
+        <SiteNav />
         <main style={{
           minHeight: '100vh',
           background: '#0d0a08',
@@ -119,6 +122,7 @@ export default function PreviewPage() {
             </div>
           </div>
         </main>
+        </div>
       )}
     </>
   );

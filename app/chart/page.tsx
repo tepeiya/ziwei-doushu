@@ -1,93 +1,169 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import BirthForm from '@/components/BirthForm';
 import ChartBoard from '@/components/ChartBoard';
 import InsightPanel from '@/components/InsightPanel';
+import StarDetailPanel from '@/components/StarDetailPanel';
 import ChartActions from '@/components/ChartActions';
+import PatternsCard from '@/components/PatternsCard';
+import ChartSummary from '@/components/ChartSummary';
+import ChartHistory, { type ChartItem } from '@/components/ChartHistory';
 import TimeNav, { type TimeView } from '@/components/TimeNav';
+import SiteNav from '@/components/SiteNav';
 import { generateChart } from '@/lib/ziwei/algorithm';
-import type { BirthInfo, ZiweiChart, Palace } from '@/lib/ziwei/types';
+import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
 
-/**
- * 命盘页 —— 开源版「排盘引擎 Demo」
- *
- * 这是一个最小可运行示例：用本仓库的排盘引擎 generateChart() 配合基础 UI
- * 组件，渲染一张完整紫微命盘 + 基础解读，并支持本命 / 大限 / 流年切换。
- *
- * 说明：线上商业版的完整交互界面（重设计的新 UI、AI 流式解读、合盘、分享
- * 卡片等）不在开源范围内；但排盘内核——安星算法、四化、格局识别、古籍库——
- * 完全开放（见 lib/ziwei/*），可自由二次开发出你自己的界面。
- */
 export default function ChartPage() {
+  const router = useRouter();
+  const { status } = useSession();
   const [chart, setChart] = useState<ZiweiChart | null>(null);
-  const [selectedPalace, setSelectedPalace] = useState<Palace | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
   const [view, setView] = useState<TimeView>('mingpan');
   const [liunianYear, setLiunianYear] = useState(() => new Date().getFullYear());
 
-  // ── 未起盘：展示出生信息表单 ──
+  const [selectedPalace, setSelectedPalace] = useState<Palace | null>(null);
+  const [selectedStar, setSelectedStar] = useState<Star | null>(null);
+  const [starPalaceName, setStarPalaceName] = useState<string | undefined>();
+  const [selectedSiHua, setSelectedSiHua] = useState<{ starName: string; siHua: string; view: TimeView } | null>(null);
+
+  const [savedCharts, setSavedCharts] = useState<ChartItem[]>([]);
+
+  // 已登录时加载「我的命盘」
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    fetch('/api/charts')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.charts) setSavedCharts(d.charts); })
+      .catch(() => {});
+  }, [status]);
+
+  const handleGenerate = useCallback(async (info: BirthInfo) => {
+    setLoading(true);
+    setError('');
+    setSelectedPalace(null);
+    setSelectedStar(null);
+    try {
+      const res = await fetch('/api/chart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(info),
+      });
+      if (!res.ok) throw new Error('chart api failed');
+      const data = await res.json();
+      setChart(data.chart);
+    } catch {
+      setChart(generateChart(info)); // 服务端不可用时降级到浏览器端排盘
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const reset = () => {
+    setChart(null);
+    setSelectedPalace(null);
+    setSelectedStar(null);
+    setSelectedSiHua(null);
+  };
+
+  const birthText = (() => {
+    const b = chart?.birthInfo as { year?: number; month?: number; day?: number; hour?: number; gender?: string } | undefined;
+    if (!b) return '';
+    const h = b.hour === 0 || b.hour === 23 ? '子时' : `${b.hour ?? '?'}时`;
+    return `${b.year}年${b.month}月${b.day}日 ${h} · ${b.gender === 'male' ? '男' : '女'}`;
+  })();
+
+  // ── 未起盘：出生信息表单 ──
   if (!chart) {
     return (
-      <main style={{ maxWidth: 720, margin: '0 auto', padding: '48px 20px' }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>紫微斗数排盘</h1>
-        <p style={{ color: '#888', marginBottom: 32, fontSize: 14, lineHeight: 1.7 }}>
-          输入出生年月日时，开源排盘引擎即时生成命盘。
-          <br />
-          （本页为引擎 Demo，完整商业版界面不在开源范围；排盘内核完全开放。）
-        </p>
-        <BirthForm
-          onSubmit={async (info: BirthInfo) => {
-            try {
-              const res = await fetch('/api/chart', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(info),
-              });
-              if (!res.ok) throw new Error('chart api failed');
-              const data = await res.json();
-              setChart(data.chart);
-            } catch {
-              setChart(generateChart(info)); // 服务端不可用时降级到浏览器端排盘
-            }
-          }}
-        />
-      </main>
+      <div className="with-tabbar min-h-screen" style={{ background: 'var(--bg-0)' }}>
+        <SiteNav />
+        <main className="mx-auto w-full" style={{ maxWidth: 720, padding: '32px 20px 48px' }}>
+          <div className="text-center mb-8">
+            <div style={{ fontSize: 30, color: 'var(--t-gold)', opacity: 0.18, marginBottom: 8 }}>☯</div>
+            <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--tx-0)' }}>紫微斗数排盘</h1>
+            <p style={{ fontSize: 13, color: 'var(--tx-3)', marginTop: 8, lineHeight: 1.7 }}>
+              输入出生年月日时，生成专属命盘，并由 AI 按传统紫微斗数体系为你深度解读
+            </p>
+          </div>
+          <BirthForm onSubmit={handleGenerate} loading={loading} />
+          {error && <p className="text-center mt-4 text-sm" style={{ color: '#dc2626' }}>{error}</p>}
+        </main>
+      </div>
     );
   }
 
-  // ── 已起盘：命盘 + 解读 ──
+  // ── 已起盘：命盘工作台 ──
   return (
-    <main style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 16px' }}>
-      <button
-        type="button"
-        onClick={() => { setChart(null); setSelectedPalace(null); }}
-        style={{
-          marginBottom: 16, padding: '6px 14px', cursor: 'pointer',
-          border: '1px solid #ccc', borderRadius: 8, background: 'transparent',
-        }}
-      >
-        ← 重新起盘
-      </button>
+    <div className="with-tabbar min-h-screen flex flex-col" style={{ background: 'var(--bg-0)' }}>
+      <SiteNav />
 
-      <TimeNav
-        chart={chart}
-        view={view}
-        liunianYear={liunianYear}
-        onViewChange={setView}
-        onYearChange={setLiunianYear}
-      />
-
-      <ChartActions chart={chart} />
-
+      {/* 顶部工具条 */}
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 380px)',
-          gap: 20, marginTop: 16, alignItems: 'start',
-        }}
+        className="sticky top-0 z-40 flex items-center gap-3 px-4 lg:px-6 h-12 lg:h-14 border-b"
+        style={{ background: 'color-mix(in srgb, var(--bg-0) 92%, transparent)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderColor: 'var(--bdr)' }}
       >
-        <ChartBoard chart={chart} onPalaceSelect={setSelectedPalace} />
-        <InsightPanel chart={chart} selectedPalace={selectedPalace} />
+        <button
+          onClick={reset}
+          className="flex items-center gap-1 text-[13px] shrink-0"
+          style={{ color: 'var(--tx-3)', background: 'none', border: 'none', cursor: 'pointer' }}
+        >
+          <span style={{ fontSize: 16 }}>‹</span><span>重新起盘</span>
+        </button>
+        <div className="w-px h-5" style={{ background: 'var(--bdr-med)' }} />
+        <span className="text-[12px] truncate" style={{ color: 'var(--ac)', letterSpacing: '0.05em' }}>{birthText}</span>
       </div>
-    </main>
+
+      {/* 工作台：桌面双栏独立滚动，移动端堆叠 */}
+      <div className="mx-auto w-full flex-1" style={{ maxWidth: 1360 }}>
+        <div className="lg:grid lg:grid-cols-[minmax(0,520px)_1fr] lg:gap-0">
+          {/* 左栏：命盘 + 操作 + 格局 */}
+          <div className="lg:border-r lg:overflow-y-auto lg:h-[calc(100vh-112px)] p-4 lg:p-5 space-y-4">
+            <TimeNav
+              chart={chart}
+              view={view}
+              liunianYear={liunianYear}
+              onViewChange={setView}
+              onYearChange={setLiunianYear}
+            />
+            <ChartBoard
+              chart={chart}
+              onStarSelect={(star, palace) => { setSelectedStar(star); setStarPalaceName(palace?.name); }}
+              onPalaceSelect={setSelectedPalace}
+              onSiHuaClick={(starName, siHua, v) => setSelectedSiHua({ starName, siHua, view: v })}
+            />
+            <ChartActions chart={chart} />
+            <PatternsCard chart={chart} />
+            <ChartSummary chart={chart} />
+            {status === 'authenticated' && savedCharts.length > 0 && (
+              <ChartHistory charts={savedCharts} />
+            )}
+          </div>
+
+          {/* 右栏：AI 解读 */}
+          <div className="lg:overflow-y-auto lg:h-[calc(100vh-112px)] p-4 lg:p-5" style={{ background: 'var(--bg-1)' }}>
+            <div className="h-[70vh] lg:h-full">
+              <InsightPanel
+                chart={chart}
+                selectedPalace={selectedPalace}
+                selectedSiHua={selectedSiHua}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 主星详情抽屉 */}
+      {selectedStar && (
+        <StarDetailPanel
+          star={selectedStar}
+          palaceName={starPalaceName}
+          onClose={() => setSelectedStar(null)}
+        />
+      )}
+    </div>
   );
 }

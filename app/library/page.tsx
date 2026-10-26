@@ -7,6 +7,7 @@
 import Link from 'next/link';
 import { ALL_BOOKS, TOTAL_PARAGRAPHS } from '@/lib/classics';
 import LibrarySearch from './LibrarySearch';
+import SiteNav from '@/components/SiteNav';
 
 export const metadata = {
   title: '传统方法论 · 古籍原典库 · 紫微斗数全集 / 全书 / 骨髓赋',
@@ -15,20 +16,8 @@ export const metadata = {
 
 export default function LibraryHomePage() {
   return (
-    <div style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
-      {/* 顶栏 */}
-      <div className="px-6 py-4 flex items-center justify-between"
-        style={{ borderBottom: '1px solid rgba(184,146,42,0.15)', background: 'var(--bg-page)' }}>
-        <Link href="/" style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.3em', textDecoration: 'none' }}>
-          ← 返回首页
-        </Link>
-        <div style={{ fontSize: '12px', color: 'var(--tx-3)', letterSpacing: '0.3em' }}>
-          古籍原典库 · CLASSICS
-        </div>
-        <Link href="/chart" style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.2em', textDecoration: 'none' }}>
-          起盘 →
-        </Link>
-      </div>
+    <div className="with-tabbar" style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+      <SiteNav />
 
       {/* Hero */}
       <div className="text-center px-6 py-16">

@@ -130,6 +130,12 @@ body {
   .container-page { padding: 0 16px; }
 }
 
+/* 为移动端固定底部 Tab 栏预留空间（桌面端无需） */
+.with-tabbar { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+@media (min-width: 768px) {
+  .with-tabbar { padding-bottom: 0; }
+}
+
 /* 卡片 */
 .card {
   background: var(--bg-card);
@@ -421,6 +427,59 @@ body {
   .palace-cell { min-height: 68px !important; padding: 5px 4px !important; }
   .chart-workspace-left { padding: 10px 8px 16px; }
   .chart-topbar { padding: 0 8px; gap: 6px; }
+}
+
+/* ─── 富组件令牌别名（--t-*）─────────────────────────────
+   以下别名供 ChartBoard / InsightPanel / ChatPanel / StarDetailPanel /
+   PatternsCard / ChartSummary / TimeNav / PalaceCell / FamousPersonCard 使用，
+   统一映射到上面的设计系统主令牌，保证明/暗主题一致。 */
+:root {
+  --t-bg:        var(--bg-0);
+  --t-surface:   var(--bg-1);
+  --t-card:      var(--bg-card);
+  --t-border:    var(--bdr-med);
+  --t-border-acc:rgba(184,146,42,0.22);
+  --t-gold:      var(--ac);
+  --t-gold-dim:  var(--ac-dim);
+  --t-text:      var(--tx-1);
+  --t-text1:     var(--tx-0);
+  --t-text2:     var(--tx-2);
+  --t-faint:     var(--tx-3);
+}
+[data-theme="dark"] {
+  --t-bg:        var(--bg-0);
+  --t-surface:   var(--bg-1);
+  --t-card:      rgba(255,255,255,0.04);
+  --t-border:    rgba(255,255,255,0.10);
+  --t-border-acc:rgba(212,168,67,0.28);
+  --t-gold:      #d4a843;
+  --t-gold-dim:  #e8c060;
+  --t-text:      #dce4f0;
+  --t-text1:     #e8eef6;
+  --t-text2:     #9db0d0;
+  --t-faint:     #6a7a96;
+}
+
+/* 玻璃拟态卡片（命盘/解读/合盘等富组件通用） */
+.card-glass {
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(200,160,60,0.18);
+  box-shadow: var(--sh-sm);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+[data-theme="dark"] .card-glass {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: var(--sh-md);
+}
+.card-inner {
+  background: rgba(255,250,240,0.55);
+  border: 1px solid var(--bdr);
+}
+[data-theme="dark"] .card-inner {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 /* ─── 打印样式 ───────────────────────────────────────────── */

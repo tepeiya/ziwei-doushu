@@ -13,6 +13,7 @@
  */
 
 import Link from 'next/link';
+import SiteNav from '@/components/SiteNav';
 import { notFound } from 'next/navigation';
 import type { TopicKey } from '@/lib/ziwei/db-analysis';
 import {
@@ -99,7 +100,8 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
   };
 
   return (
-    <div style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+    <div className="with-tabbar" style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+      <SiteNav />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       {/* 顶栏 */}

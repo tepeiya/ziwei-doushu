@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import SiteNav from '@/components/SiteNav';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -37,7 +38,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+    <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <SiteNav />
       <div style={{
         width: '100%', maxWidth: '380px', background: 'var(--bg-card)', border: '1px solid var(--bdr)',
         borderRadius: '18px', padding: '36px 30px',

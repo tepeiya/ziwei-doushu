@@ -15,7 +15,6 @@
  *  - 倪师《天纪》紫微斗数讲义
  */
 
-import 'server-only';
 import type { ZiweiChart, Palace, Star } from './types';
 
 // ────────────────── 类型 ──────────────────

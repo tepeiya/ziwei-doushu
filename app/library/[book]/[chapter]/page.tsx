@@ -3,6 +3,7 @@
  */
 
 import Link from 'next/link';
+import SiteNav from '@/components/SiteNav';
 import { notFound } from 'next/navigation';
 import { ALL_BOOKS, getChapter } from '@/lib/classics';
 
@@ -32,7 +33,8 @@ export default async function ChapterPage({ params }: { params: Promise<{ book: 
   const nextIdx = chapterIdx + 1;
 
   return (
-    <div style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+    <div className="with-tabbar" style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+      <SiteNav />
       <div className="px-6 py-4 flex items-center justify-between"
         style={{ borderBottom: '1px solid rgba(184,146,42,0.15)', background: 'var(--bg-page)' }}>
         <Link href={`/library/${book.slug}`} style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.3em', textDecoration: 'none' }}>

@@ -3,6 +3,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatYuan } from '@/lib/billing';
+import SiteNav from '@/components/SiteNav';
 
 interface OrderInfo {
   status: string;
@@ -46,7 +47,8 @@ export default function PayPage() {
 
   if (done) {
     return (
-      <div style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+        <SiteNav />
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '44px', marginBottom: '16px' }}>✅</div>
           <h1 style={{ fontSize: '20px', color: 'var(--tx-0)', marginBottom: '8px' }}>支付成功</h1>
@@ -57,7 +59,8 @@ export default function PayPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+    <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <SiteNav />
       <div style={{ width: '100%', maxWidth: '380px', background: 'var(--bg-card)', border: '1px solid var(--bdr)', borderRadius: '18px', padding: '36px 30px', textAlign: 'center' }}>
         <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tx-0)', marginBottom: '6px' }}>订单支付</h1>
         <p style={{ fontSize: '12px', color: 'var(--tx-3)', marginBottom: '24px' }}>沙箱演示 · 模拟支付（不真实扣款）</p>

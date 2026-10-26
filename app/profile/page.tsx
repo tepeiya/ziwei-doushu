@@ -3,12 +3,14 @@ import { authOptions } from '@/lib/auth';
 import { listCharts, getMembership, isMember } from '@/lib/db';
 import Link from 'next/link';
 import ChartHistory, { type ChartItem } from '@/components/ChartHistory';
+import SiteNav from '@/components/SiteNav';
 
 export const dynamic = 'force-dynamic';
 
 function NotLogin() {
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+    <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <SiteNav />
       <div style={{ textAlign: 'center' }}>
         <p style={{ color: 'var(--tx-2)', fontSize: '15px', marginBottom: '18px' }}>请先登录后查看命盘与会员</p>
         <Link href="/login" style={{
@@ -33,7 +35,8 @@ export default async function ProfilePage() {
   const expires = m.expiresAt ? new Date(m.expiresAt).toLocaleDateString('zh-CN') : '—';
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-0)', padding: '32px 24px 80px' }}>
+    <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', padding: '32px 24px 80px' }}>
+      <SiteNav />
       <div style={{ maxWidth: '860px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '22px', fontWeight: 600, color: 'var(--tx-0)', letterSpacing: '0.1em', marginBottom: '4px' }}>
           个人中心

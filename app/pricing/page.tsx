@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PLANS, formatYuan, type Plan } from '@/lib/billing';
+import SiteNav from '@/components/SiteNav';
 
 export default function PricingPage() {
   const router = useRouter();
@@ -34,7 +35,8 @@ export default function PricingPage() {
   const list = Object.values(PLANS) as Plan[];
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-0)', padding: '48px 24px 80px' }}>
+    <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', padding: '48px 24px 80px' }}>
+      <SiteNav />
       <div style={{ maxWidth: '960px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--tx-0)', textAlign: 'center', letterSpacing: '0.1em' }}>开通会员 · 解锁完整解读</h1>
         <p style={{ fontSize: '14px', color: 'var(--tx-3)', textAlign: 'center', margin: '10px 0 40px' }}>

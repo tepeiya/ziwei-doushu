@@ -3,6 +3,7 @@ import { STAR_DB, TOPIC_LABEL, TOPIC_PALACE_NAME } from '@/lib/ziwei/db-analysis
 import type { TopicKey } from '@/lib/ziwei/db-analysis';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import SiteNav from '@/components/SiteNav';
 
 // 主星字段映射（与 lib/seo/knowledge 内部 StarContent 对应）
 const TOPIC_FIELD: Record<TopicKey, string> = {
@@ -61,7 +62,9 @@ export default function SeoArticle({ params }: { params: { star: string; topic: 
   const hasContent = !!(raw && raw.trim());
 
   return (
-    <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px 80px', color: 'var(--tx-1)', lineHeight: 1.85 }}>
+    <div className="with-tabbar">
+      <SiteNav />
+      <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px 80px', color: 'var(--tx-1)', lineHeight: 1.85 }}>
       <div style={{ fontSize: 12, color: 'var(--tx-3)', letterSpacing: '0.2em', marginBottom: 8 }}>
         紫微斗数知识 · {label}
       </div>
@@ -103,5 +106,6 @@ export default function SeoArticle({ params }: { params: { star: string; topic: 
         本页内容为传统文化科普，仅供娱乐参考，不构成任何人生、医疗、投资或法律决策依据。
       </p>
     </main>
+    </div>
   );
 }

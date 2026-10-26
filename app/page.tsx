@@ -5,6 +5,7 @@ import { motion, useScroll, useTransform, useInView, AnimatePresence } from 'fra
 import StarField from '@/components/StarField';
 import { useTheme, type Theme } from '@/components/ThemeProvider';
 import AnnouncementModal from '@/components/AnnouncementModal';
+import SiteNav from '@/components/SiteNav';
 
 // ─── 滚动入场 wrapper ────────────────────────────────────
 function FadeIn({
@@ -463,9 +464,10 @@ export default function HomePage() {
   }, [c.bgBase]);
 
   return (
-    <div style={{ background: c.bgBase, transition: 'background 0.35s ease' }} className="overflow-x-hidden">
+    <div style={{ background: c.bgBase, transition: 'background 0.35s ease' }} className="overflow-x-hidden with-tabbar">
       {/* 致用户公告——首次访问全屏覆盖，关闭后才进入首页 */}
       <AnnouncementModal />
+      <SiteNav header={false} />
 
       <StarField />
 
