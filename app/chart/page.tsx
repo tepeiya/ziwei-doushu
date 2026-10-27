@@ -17,6 +17,7 @@ const StarDetailPanel = dynamic(() => import('@/components/StarDetailPanel'), { 
 import ChartActions from '@/components/ChartActions';
 import PatternsCard from '@/components/PatternsCard';
 import ChartSummary from '@/components/ChartSummary';
+import ChartViz from '@/components/ChartViz';
 import ChartHistory, { type ChartItem } from '@/components/ChartHistory';
 import { type TimeView } from '@/components/TimeNav';
 import SiteNav from '@/components/SiteNav';
@@ -166,6 +167,7 @@ export default function ChartPage() {
             <ChartActions chart={chart} />
             <PatternsCard chart={chart} />
             <ChartSummary chart={chart} />
+            <ChartViz chart={chart} />
             {status === 'authenticated' && savedCharts.length > 0 && (
               <ChartHistory charts={savedCharts} />
             )}
