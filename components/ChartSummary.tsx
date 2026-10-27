@@ -2,7 +2,9 @@
 import { motion } from 'framer-motion';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 import { BRANCHES, STEMS } from '@/lib/ziwei/constants';
+import clsx from 'clsx';
 import { detectPatterns, getMingGongSummary } from '@/lib/ziwei/patterns';
+import { SIHUA_BADGE, type SiHua } from '@/lib/ziwei/sihua-colors';
 
 interface ChartSummaryProps {
   chart: ZiweiChart;
@@ -19,6 +21,11 @@ export default function ChartSummary({ chart }: ChartSummaryProps) {
   const patterns = detectPatterns(chart);
   const { stars: mingStars, keywords, nature } = getMingGongSummary(chart);
   const currentDx = chart.daXians[chart.currentDaXianIndex];
+
+  // 阴阳性别：年干为阳干（甲丙戊庚壬，索引偶数为阳），结合性别得 阳男/阴男/阴女/阳女
+  const yinYangGender =
+    chart.yinYangGender ??
+    `${chart.lunarInfo.yearStem % 2 === 0 ? '阳' : '阴'}${chart.birthInfo.gender === 'male' ? '男' : '女'}`;
 
   const siHuaSummary: { name: string; siHua: string; palaceName: string }[] = [];
   for (const palace of chart.palaces) {
@@ -85,14 +92,26 @@ export default function ChartSummary({ chart }: ChartSummaryProps) {
             </div>
           )}
 
-          <div className="ml-auto text-right">
-            <div className="text-[9px] mb-1" style={{ color: 'var(--t-faint)', opacity: 0.85 }}>五行局 · 当前大限</div>
-            <div className="text-[11px]" style={{ color: 'var(--t-text2)' }}>{chart.wuxingJuName}</div>
-            {currentDx && (
-              <div className="text-[11px] text-purple-500 mt-0.5">
-                {currentDx.startAge}~{currentDx.endAge}岁 · {currentDx.palaceName}
+          {/* 右侧信息簇：五行局 / 命主身主 */}
+          <div className="ml-auto text-right space-y-3">
+            <div>
+              <div className="text-[9px] mb-1" style={{ color: 'var(--t-faint)', opacity: 0.85 }}>五行局 · 当前大限</div>
+              <div className="text-[11px]" style={{ color: 'var(--t-text2)' }}>{chart.wuxingJuName}</div>
+              {currentDx && (
+                <div className="text-[11px] text-purple-500 mt-0.5">
+                  {currentDx.startAge}~{currentDx.endAge}岁 · {currentDx.palaceName}
+                </div>
+              )}
+            </div>
+
+            {/* 命主 / 身主 / 阴阳性别 */}
+            <div>
+              <div className="text-[9px] mb-1" style={{ color: 'var(--t-faint)', opacity: 0.85 }}>命主 · 身主</div>
+              <div className="text-[11px] font-medium" style={{ color: 'var(--t-gold-dim)' }}>
+                {chart.mingZhu ?? '—'} · {chart.shenZhu ?? '—'}
               </div>
-            )}
+              <div className="text-[9px] mt-0.5" style={{ color: 'var(--t-faint)' }}>{yinYangGender}</div>
+            </div>
           </div>
         </div>
 
@@ -109,6 +128,39 @@ export default function ChartSummary({ chart }: ChartSummaryProps) {
       </div>
       </motion.div>
 
+      {/* ── 八字四柱 ── */}
+      {chart.lunarInfo.fourPillars && (() => {
+        const pillars = chart.lunarInfo.fourPillars!;
+        const labels = ['年', '月', '日', '时'] as const;
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45, duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <div className="card-glass rounded-xl p-4">
+              <div className="text-[10px] tracking-widest mb-3 flex items-center gap-2" style={{ color: 'var(--t-faint)' }}>
+                <span style={{ color: 'var(--t-gold)', opacity: 0.6 }}>☰</span>
+                八字四柱
+                <span className="text-[9px] ml-auto" style={{ color: 'var(--t-faint)', opacity: 0.6 }}>节气换柱</span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {labels.map((label, i) => (
+                  <div
+                    key={label}
+                    className="flex flex-col items-center justify-center py-2 rounded-lg"
+                    style={{ border: '1px solid var(--t-border)', background: 'var(--t-surface)' }}
+                  >
+                    <span className="text-[8px] mb-1" style={{ color: 'var(--t-faint)' }}>{label}柱</span>
+                    <span className="text-[13px] font-bold font-mono tracking-wide" style={{ color: 'var(--t-gold)' }}>{pillars[i]}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        );
+      })()}
+
       {/* ── 本命四化 ── */}
       {siHuaSummary.length > 0 && (
         <motion.div
@@ -123,17 +175,9 @@ export default function ChartSummary({ chart }: ChartSummaryProps) {
           </div>
           <div className="grid grid-cols-2 gap-2">
             {siHuaSummary.map(({ name, siHua, palaceName }) => {
-              const colors: Record<string, { text: string; bg: string; border: string }> = {
-                '禄': { text: '#4ade80', bg: 'rgba(74,222,128,0.06)', border: 'rgba(74,222,128,0.2)' },
-                '权': { text: '#60a5fa', bg: 'rgba(96,165,250,0.06)', border: 'rgba(96,165,250,0.2)' },
-                '科': { text: '#facc15', bg: 'rgba(250,204,21,0.06)', border: 'rgba(250,204,21,0.2)' },
-                '忌': { text: '#f87171', bg: 'rgba(248,113,113,0.06)', border: 'rgba(248,113,113,0.2)' },
-              };
-              const c = colors[siHua] || colors['禄'];
               return (
                 <div key={name + siHua}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg text-[10px]"
-                  style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.text }}
+                  className={clsx('sihua-badge flex items-center justify-between px-3 py-2 rounded-lg text-[10px]', SIHUA_BADGE[siHua as SiHua])}
                 >
                   <span className="font-medium">{name}</span>
                   <div className="flex items-center gap-1.5 text-right">

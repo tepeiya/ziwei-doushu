@@ -20,7 +20,13 @@ const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).spli
 const hits: string[] = [];
 for (const f of files) {
   if (BANNED.some((re) => re.test(f))) { hits.push(`${f}（文件名）`); continue; }
-  const lines = readFileSync(f, 'utf8').split('\n');
+  let lines: string[];
+  try {
+    lines = readFileSync(f, 'utf8').split('\n');
+  } catch {
+    // 重构中已删除但尚未提交的文件：跳过，不阻塞测试
+    continue;
+  }
   lines.forEach((line, i) => {
     const cleaned = line.replace(IDIOMS, '');
     if (BANNED.some((re) => re.test(cleaned))) hits.push(`${f}:${i + 1}  ${line.trim().slice(0, 80)}`);

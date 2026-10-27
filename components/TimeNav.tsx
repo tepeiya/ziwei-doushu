@@ -2,6 +2,7 @@
 import { motion } from 'framer-motion';
 import { STEMS, SI_HUA_TABLE } from '@/lib/ziwei/constants';
 import type { ZiweiChart } from '@/lib/ziwei/types';
+import { SIHUA_VAR } from '@/lib/ziwei/sihua-colors';
 
 export type TimeView = 'mingpan' | 'daxian' | 'liunian';
 
@@ -30,12 +31,6 @@ export function buildSiHuaOverlay(stemIndex: number): Record<string, string> {
   };
 }
 
-const SIHUA_COLORS: Record<string, string> = {
-  '禄': '#4ade80',
-  '权': '#60a5fa',
-  '科': '#facc15',
-  '忌': '#f87171',
-};
 
 export default function TimeNav({
   chart,
@@ -157,7 +152,7 @@ export default function TimeNav({
             const starName = Object.keys(overlayInfo.overlay).find(k => overlayInfo.overlay[k] === sh);
             if (!starName) return null;
             return (
-              <span key={sh} className="text-[9px] font-medium" style={{ color: SIHUA_COLORS[sh] }}>
+              <span key={sh} className="text-[9px] font-medium" style={{ color: SIHUA_VAR[sh] }}>
                 {starName}化{sh}
               </span>
             );

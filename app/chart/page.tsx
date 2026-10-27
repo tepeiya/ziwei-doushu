@@ -7,21 +7,46 @@ import BirthForm from '@/components/BirthForm';
 import dynamic from 'next/dynamic';
 const ChartBoard = dynamic(() => import('@/components/ChartBoard'), {
   ssr: false,
-  loading: () => <div style={{ padding: 24, color: 'var(--tx-2)' }}>命盘加载中…</div>,
+  loading: () => <ChartSkeleton />,
 });
 const InsightPanel = dynamic(() => import('@/components/InsightPanel'), {
   ssr: false,
-  loading: () => <div style={{ padding: 24, color: 'var(--tx-2)' }}>解读面板加载中…</div>,
+  loading: () => <InsightSkeleton />,
 });
 const StarDetailPanel = dynamic(() => import('@/components/StarDetailPanel'), { ssr: false });
 import ChartActions from '@/components/ChartActions';
 import PatternsCard from '@/components/PatternsCard';
 import ChartSummary from '@/components/ChartSummary';
 import ChartHistory, { type ChartItem } from '@/components/ChartHistory';
-import TimeNav, { type TimeView } from '@/components/TimeNav';
+import { type TimeView } from '@/components/TimeNav';
 import SiteNav from '@/components/SiteNav';
 import { generateChart } from '@/lib/ziwei/algorithm';
 import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
+
+/** 命盘骨架屏（路由级代码分割时的占位） */
+function ChartSkeleton() {
+  return (
+    <div className="card-glass rounded-xl p-5 animate-pulse" style={{ minHeight: 520 }}>
+      <div className="h-3 w-28 rounded mb-4" style={{ background: 'var(--t-border)' }} />
+      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(4, 1fr)', aspectRatio: '1 / 1' }}>
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div key={i} className="rounded" style={{ background: 'var(--t-border)', opacity: 0.55 }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 解读面板骨架屏 */
+function InsightSkeleton() {
+  return (
+    <div className="card-glass rounded-xl p-5 animate-pulse h-full" style={{ minHeight: 400 }}>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="mb-3 rounded-lg" style={{ height: 14 + i * 4, background: 'var(--t-border)', opacity: 0.5, width: `${90 - i * 12}%` }} />
+      ))}
+    </div>
+  );
+}
 
 export default function ChartPage() {
   const router = useRouter();
@@ -29,9 +54,6 @@ export default function ChartPage() {
   const [chart, setChart] = useState<ZiweiChart | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const [view, setView] = useState<TimeView>('mingpan');
-  const [liunianYear, setLiunianYear] = useState(() => new Date().getFullYear());
 
   const [selectedPalace, setSelectedPalace] = useState<Palace | null>(null);
   const [selectedStar, setSelectedStar] = useState<Star | null>(null);
@@ -135,13 +157,6 @@ export default function ChartPage() {
         <div className="lg:grid lg:grid-cols-[minmax(0,520px)_1fr] lg:gap-0">
           {/* 左栏：命盘 + 操作 + 格局 */}
           <div className="lg:border-r lg:overflow-y-auto lg:h-[calc(100vh-112px)] p-4 lg:p-5 space-y-4">
-            <TimeNav
-              chart={chart}
-              view={view}
-              liunianYear={liunianYear}
-              onViewChange={setView}
-              onYearChange={setLiunianYear}
-            />
             <ChartBoard
               chart={chart}
               onStarSelect={(star, palace) => { setSelectedStar(star); setStarPalaceName(palace?.name); }}

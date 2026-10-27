@@ -398,6 +398,26 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
         </div>
       </div>
 
+      {/* ── 当前分析对象上下文 ── */}
+      {(selectedSiHua || selectedPalace) && (
+        <div
+          className="flex-shrink-0 px-3 py-2 flex items-center gap-2 text-[10px]"
+          style={{ borderBottom: '1px solid var(--t-border)', background: 'rgba(212,168,67,0.05)', color: 'var(--t-gold)' }}
+        >
+          <span style={{ color: 'var(--t-faint)' }}>正在分析</span>
+          {selectedSiHua ? (
+            <span className="font-medium">
+              {selectedSiHua.starName} · 化{selectedSiHua.siHua}
+              <span style={{ color: 'var(--t-faint)' }}>
+                （{selectedSiHua.view === 'liunian' ? '流年' : selectedSiHua.view === 'daxian' ? '大限' : '本命'}）
+              </span>
+            </span>
+          ) : selectedPalace ? (
+            <span className="font-medium">{selectedPalace.name}</span>
+          ) : null}
+        </div>
+      )}
+
       {/* ── Messages ── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
 

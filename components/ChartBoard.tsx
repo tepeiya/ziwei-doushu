@@ -5,6 +5,7 @@ import type { ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
 import { BRANCHES, STEMS } from '@/lib/ziwei/constants';
 import PalaceCell from './PalaceCell';
 import TimeNav, { type TimeView, getYearStemIndex, buildSiHuaOverlay } from './TimeNav';
+import { SIHUA_BADGE } from '@/lib/ziwei/sihua-colors';
 
 interface ChartBoardProps {
   chart: ZiweiChart;
@@ -268,13 +269,8 @@ export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHu
         transition={{ delay: 0.7 }}
         className="mt-3 flex items-center justify-center gap-2 text-[9px] flex-wrap"
       >
-        {[
-          { h: '化禄', c: 'text-emerald-500 border-emerald-500/30' },
-          { h: '化权', c: 'text-blue-500 border-blue-500/30' },
-          { h: '化科', c: 'text-yellow-500 border-yellow-500/30' },
-          { h: '化忌', c: 'text-red-500 border-red-500/30' },
-        ].map(({ h, c }) => (
-          <span key={h} className={`border px-1.5 py-0.5 rounded-full font-medium ${c}`}>{h}</span>
+        {(['禄', '权', '科', '忌'] as const).map((sh) => (
+          <span key={sh} className={`sihua-badge px-1.5 py-0.5 rounded-full font-medium ${SIHUA_BADGE[sh]}`}>化{sh}</span>
         ))}
         <span className="px-1.5 py-0.5 rounded-full" style={{ color: 'var(--t-faint)', border: '1px solid var(--t-border)' }}>
           点击宫位看三方四正
