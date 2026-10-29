@@ -8,3 +8,6 @@ dist/
 .DS_Store
 node_modules
 .data/
+
+# Taro/SWC 本地构建缓存（平台相关二进制，不入库）
+.swc/
