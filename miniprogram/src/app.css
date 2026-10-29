@@ -1,0 +1,89 @@
+/* 墨金 (ink-gold) 设计系统 — 小程序端全局样式 */
+page {
+  --bg: #0e0c08;
+  --bg-2: #161209;
+  --card: rgba(212, 175, 55, 0.06);
+  --card-solid: #1b160d;
+  --border: rgba(212, 175, 55, 0.22);
+  --gold: #d4af37;
+  --gold-dim: #b8941f;
+  --text: #ede4d3;
+  --text-2: #9a8f7a;
+  --lu: #4ade80;
+  --quan: #60a5fa;
+  --ke: #facc15;
+  --ji: #f87171;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  font-size: 28px;
+}
+
+view, text, scroll-view, navigator, button, input, picker, textarea {
+  box-sizing: border-box;
+}
+
+.page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #0e0c08 0%, #120f09 100%);
+  padding-bottom: 48px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  margin: 20px 24px;
+}
+
+.btn-gold {
+  background: linear-gradient(135deg, #d4af37, #b8941f);
+  color: #1a1408;
+  font-weight: 600;
+  border-radius: 999px;
+  border: none;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--gold);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.title-gold {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wrap {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+}

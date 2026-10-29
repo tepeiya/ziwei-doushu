@@ -1,0 +1,51 @@
+{
+  "name": "ziwei-miniprogram",
+  "version": "1.0.0",
+  "private": true,
+  "description": "紫微斗数小程序端 (Taro) — 镜像 Web 端功能",
+  "templateInfo": {
+    "name": "default",
+    "typescript": true,
+    "css": "sass",
+    "framework": "react"
+  },
+  "scripts": {
+    "build:weapp": "taro build --type weapp",
+    "build:h5": "taro build --type h5",
+    "dev:weapp": "npm run build:weapp -- --watch",
+    "dev:h5": "npm run build:h5 -- --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "browserslist": [
+    "last 3 versions",
+    "Android >= 4.1",
+    "ios >= 8"
+  ],
+  "dependencies": {
+    "@tarojs/components": "3.6.23",
+    "@tarojs/helper": "3.6.23",
+    "@tarojs/plugin-platform-h5": "3.6.23",
+    "@tarojs/plugin-platform-weapp": "3.6.23",
+    "@tarojs/react": "3.6.23",
+    "@tarojs/runtime": "3.6.23",
+    "@tarojs/shared": "3.6.23",
+    "@tarojs/taro": "3.6.23",
+    "iztro": "^2.5.8",
+    "lunar-javascript": "^1.7.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "@tarojs/cli": "3.6.23",
+    "@tarojs/plugin-framework-react": "^3.6.23",
+    "@tarojs/webpack5-runner": "3.6.23",
+    "@types/react": "^18.2.0",
+    "@types/webpack-env": "^1.18.0",
+    "babel-preset-taro": "3.6.23",
+    "typescript": "^5.4.0",
+    "webpack": "^5.78.0"
+  }
+}
