@@ -1,6 +1,5 @@
 /**
  * 古籍原典查询库 · 主页
- *
  * 列出所有收录古籍 + 全局搜索入口
  */
 
@@ -16,83 +15,59 @@ export const metadata = {
 
 export default function LibraryHomePage() {
   return (
-    <div className="with-tabbar" style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+    <div className="mv-page mv-tabbed" style={{ background: 'var(--bg-0)' }}>
       <SiteNav />
 
-      {/* Hero */}
-      <div className="text-center px-6 py-16">
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <div style={{ height: '1px', width: '48px', background: 'linear-gradient(to right, transparent, rgba(184,146,42,0.4))' }} />
-          <span style={{ fontSize: '11px', color: 'var(--ac)', letterSpacing: '0.4em' }}>NI HAI XIA · CURRICULUM</span>
-          <div style={{ height: '1px', width: '48px', background: 'linear-gradient(to left, transparent, rgba(184,146,42,0.4))' }} />
-        </div>
-        <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: 700, color: 'var(--tx-0)', letterSpacing: '0.15em', marginBottom: '12px' }}>
-          传统方法论 · 古籍原典库
-        </h1>
-        <p style={{ fontSize: '14px', color: 'var(--tx-2)', letterSpacing: '0.1em', maxWidth: '600px', margin: '0 auto', lineHeight: 1.7 }}>
+      <div className="mv-hero">
+        <div className="mv-mark-lg">📜</div>
+        <span className="mv-eyebrow">CLASSICS</span>
+        <h1 className="mv-h1">古籍原典库</h1>
+        <p className="mv-sub">
           紫微斗数权威古籍全文检索<br />
           收录 <strong style={{ color: 'var(--ac)' }}>{ALL_BOOKS.length}</strong> 部古籍 · 共 <strong style={{ color: 'var(--ac)' }}>{TOTAL_PARAGRAPHS}</strong> 段精华
         </p>
       </div>
 
-      {/* 搜索 */}
-      <div className="max-w-2xl mx-auto px-6 mb-12">
+      <div style={{ padding: '0 16px 16px' }}>
         <LibrarySearch />
       </div>
 
-      {/* 古籍列表 */}
-      <div className="max-w-5xl mx-auto px-6 pb-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="mv-section-title">收录古籍</div>
+      <div style={{ padding: '0 16px 24px' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {ALL_BOOKS.map(book => (
             <Link
               key={book.slug}
               href={`/library/${book.slug}`}
-              style={{
-                display: 'block',
-                background: 'var(--bg-card)',
-                border: '1px solid rgba(184,146,42,0.2)',
-                borderRadius: '14px',
-                padding: '24px',
-                textDecoration: 'none',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 8px rgba(184,146,42,0.06)',
-              }}
-              className="hover:shadow-lg"
+              className="mv-card-flat"
+              style={{ textDecoration: 'none', display: 'block' }}
             >
-              <div style={{ fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.2em', marginBottom: '6px' }}>
+              <div style={{ fontSize: 11, color: 'var(--tx-3)', letterSpacing: '0.2em', marginBottom: 6 }}>
                 {book.dynasty} · {book.author.split(' ')[0]}
               </div>
-              <div style={{ fontSize: '20px', fontWeight: 600, color: 'var(--tx-0)', marginBottom: '10px', letterSpacing: '0.1em' }}>
+              <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--tx-0)', marginBottom: 8, letterSpacing: '0.1em' }}>
                 《{book.title}》
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--tx-2)', lineHeight: 1.7, marginBottom: '14px' }}>
+              <div style={{ fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.7, marginBottom: 12 }}>
                 {book.intro}
               </div>
-              <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--tx-3)' }}>
+              <div className="flex gap-3" style={{ fontSize: 11, color: 'var(--tx-3)' }}>
                 <span>{book.chapters.length} 章节</span>
                 <span style={{ color: 'rgba(184,146,42,0.4)' }}>·</span>
                 <span>{book.chapters.reduce((s, c) => s + c.paragraphs.length, 0)} 段精华</span>
               </div>
-              <div style={{
-                display: 'inline-flex',
-                marginTop: '14px',
-                fontSize: '11px',
-                color: 'var(--ac)',
-                letterSpacing: '0.15em',
-                fontWeight: 500,
-              }}>
+              <div style={{ marginTop: 12, fontSize: 11, color: 'var(--ac)', letterSpacing: '0.15em', fontWeight: 500 }}>
                 进入查阅 →
               </div>
             </Link>
           ))}
         </div>
 
-        {/* 底部说明 */}
-        <div style={{ marginTop: '60px', padding: '24px', background: 'rgba(184,146,42,0.05)', borderRadius: '10px', textAlign: 'center' }}>
-          <div style={{ fontSize: '11px', color: 'var(--ac-dim)', fontWeight: 600, letterSpacing: '0.15em', marginBottom: '8px' }}>
+        <div style={{ marginTop: 24, padding: 20, background: 'var(--bg-card)', borderRadius: 'var(--mv-radius-sm)', textAlign: 'center', border: '1px solid var(--bdr)' }}>
+          <div style={{ fontSize: 11, color: 'var(--ac-dim)', fontWeight: 600, letterSpacing: '0.15em', marginBottom: 8 }}>
             关于本库
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--tx-2)', lineHeight: 1.8, maxWidth: '600px', margin: '0 auto' }}>
+          <div style={{ fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.8, maxWidth: 600, margin: '0 auto' }}>
             所收录古籍均为公版（明代刊本）。<br />
             内容持续完善，未来将补全《紫微斗数全集》全本与传统《天纪》引证目录。<br />
             如发现任何错误请联系我们。

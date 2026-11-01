@@ -116,36 +116,20 @@ export default function SiteNav({ header = true }: { header?: boolean }) {
         </div>
       </header>
 
-      {/* ══ 移动端 slim 顶栏（仅首页以外的页面需要，但统一渲染不影响体验）══ */}
-      <header
-        className="sticky top-0 z-50 flex md:hidden items-center justify-between px-4 h-12 border-b"
-        style={{
-          background: 'color-mix(in srgb, var(--bg-0) 90%, transparent)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          borderColor: 'var(--bdr)',
-        }}
-      >
-        <Link href="/" className="flex items-center gap-1.5" style={{ textDecoration: 'none' }}>
-          <span style={{ fontSize: 16, color: 'var(--t-gold)' }}>☯</span>
-          <span className="font-semibold tracking-[0.15em]" style={{ color: 'var(--tx-0)', fontSize: 13 }}>紫微命盘</span>
+      {/* 星河氛围层：仅移动端 */}
+      <div className="mv-aurora mv-only" aria-hidden />
+      {/* ══ 移动端 slim 顶栏 ══ */}
+      <header className="mv-topbar mv-only">
+        <Link href="/" className="mv-brand">
+          <span className="mv-mark">☯</span>
+          <span>紫微命盘</span>
         </Link>
         <ThemeToggle compact />
-        </header>
+      </header>
       </>
       )}
-      {/* ══ 移动端底部 Tab 栏 ══ */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-50 md:hidden flex items-stretch justify-around border-t"
-        aria-label="底部导航"
-        style={{
-          background: 'color-mix(in srgb, var(--bg-0) 94%, transparent)',
-          backdropFilter: 'blur(18px)',
-          WebkitBackdropFilter: 'blur(18px)',
-          borderColor: 'var(--bdr)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
-        }}
-      >
+      {/* ══ 移动端底部 Tab 栏（重做版）══ */}
+      <nav className="mv-tabbar mv-only" aria-label="底部导航">
         {TAB_LINKS.map((tab) => {
           const active = isActive(pathname, tab.href);
           return (
@@ -153,11 +137,10 @@ export default function SiteNav({ header = true }: { header?: boolean }) {
               key={tab.href}
               href={tab.href}
               aria-current={active ? 'page' : undefined}
-              className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2"
-              style={{ textDecoration: 'none', color: active ? 'var(--t-gold)' : 'var(--tx-3)' }}
+              className={`mv-tab${active ? ' mv-tab-active' : ''}`}
             >
-              <span style={{ fontSize: 18, lineHeight: 1 }}>{tab.glyph}</span>
-              <span style={{ fontSize: 10 }}>{t(tab.key)}</span>
+              <span className="mv-tab-glyph">{tab.glyph}</span>
+              <span>{t(tab.key)}</span>
             </Link>
           );
         })}

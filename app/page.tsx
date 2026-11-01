@@ -471,9 +471,10 @@ export default function HomePage() {
   }, [c.bgBase]);
 
   return (
-    <div style={{ background: c.bgBase, transition: 'background 0.35s ease' }} className="overflow-x-hidden with-tabbar">
+    <div style={{ background: c.bgBase, transition: 'background 0.35s ease' }} className="overflow-x-hidden mv-page mv-tabbed">
       <SiteNav header={false} />
 
+      <div className="mv-aurora mv-only" aria-hidden />
       <StarField />
 
       {/* 全局光晕 */}

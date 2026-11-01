@@ -10,14 +10,12 @@ export const dynamic = 'force-dynamic';
 
 function NotLogin() {
   return (
-    <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+    <div className="mv-page mv-tabbed" style={{ background: 'var(--bg-0)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <SiteNav />
-      <div style={{ textAlign: 'center' }}>
-        <p style={{ color: 'var(--tx-2)', fontSize: '15px', marginBottom: '18px' }}>请先登录后查看命盘与会员</p>
-        <Link href="/login" style={{
-          padding: '12px 32px', borderRadius: 'var(--r-pill)', background: 'linear-gradient(135deg, #9a6210, #c88020)',
-          color: '#fff8e8', fontSize: '14px', fontWeight: 600, textDecoration: 'none',
-        }}>去登录</Link>
+      <div className="mv-center">
+        <div className="mv-center-emoji">☯</div>
+        <div className="mv-sub">请先登录后查看命盘与会员</div>
+        <Link href="/login" className="mv-btn mv-btn-primary mv-btn-block" style={{ textDecoration: 'none' }}>去登录</Link>
       </div>
     </div>
   );
@@ -37,78 +35,46 @@ export default async function ProfilePage() {
   const expires = m.expiresAt ? new Date(m.expiresAt).toLocaleDateString('zh-CN') : '—';
 
   return (
-    <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', padding: '32px 24px 80px' }}>
+    <div className="mv-page mv-tabbed" style={{ background: 'var(--bg-0)' }}>
       <SiteNav />
-      <div style={{ maxWidth: '860px', margin: '0 auto' }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 600, color: 'var(--tx-0)', letterSpacing: '0.1em', marginBottom: '4px' }}>
-          个人中心
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--tx-3)', marginBottom: '28px' }}>你好，{nickname}</p>
 
-        {/* 会员卡片 */}
-        <div style={{
-          background: 'var(--bg-card)', border: '1px solid var(--bdr)', borderRadius: '16px',
-          padding: '24px', marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px',
-        }}>
-          <div>
-            <div style={{ fontSize: '12px', color: 'var(--tx-3)', letterSpacing: '0.2em', marginBottom: '6px' }}>当前会员</div>
-            <div style={{ fontSize: '20px', fontWeight: 600, color: member ? 'var(--ac)' : 'var(--tx-0)' }}>{planName}</div>
-            <div style={{ fontSize: '12px', color: 'var(--tx-3)', marginTop: '4px' }}>
-              {member ? `有效期至 ${expires}` : '开通会员解锁全部 AI 解读与命书'}
-            </div>
-          </div>
-          {!member && (
-            <Link href="/pricing" style={{
-              padding: '10px 24px', borderRadius: 'var(--r-pill)', background: 'linear-gradient(135deg, #9a6210, #c88020)',
-              color: '#fff8e8', fontSize: '13px', fontWeight: 600, textDecoration: 'none',
-            }}>开通会员</Link>
-          )}
+      <div className="mv-hero">
+        <div className="mv-mark-lg">☯</div>
+        <span className="mv-eyebrow">MEMBER</span>
+        <h1 className="mv-h1">{nickname}</h1>
+        <p className="mv-sub">你好，欢迎回来</p>
+      </div>
+
+      {/* 会员卡片 */}
+      <div className="mv-card mv-card-glow">
+        <div className="mv-row" style={{ marginBottom: 14 }}>
+          <span className="mv-label" style={{ margin: 0 }}>当前会员</span>
+          <span className="mv-chip mv-chip-active">{member ? planName : '免费用户'}</span>
         </div>
-
-        {isAdmin && (
-          <div
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid rgba(212,168,67,0.35)',
-              borderRadius: 16,
-              padding: 24,
-              marginBottom: 28,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 16,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--tx-3)', letterSpacing: '0.2em', marginBottom: 6 }}>
-                管理员
-              </div>
-              <div style={{ fontSize: 14, color: 'var(--tx-0)' }}>你拥有系统管理权限</div>
-            </div>
-            <Link
-              href="/admin"
-              style={{
-                padding: '10px 24px',
-                borderRadius: 'var(--r-pill)',
-                background: 'linear-gradient(135deg, #9a6210, #c88020)',
-                color: '#fff8e8',
-                fontSize: 13,
-                fontWeight: 600,
-                textDecoration: 'none',
-              }}
-            >
-              进入系统管理
-            </Link>
-          </div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: member ? 'var(--ac)' : 'var(--tx-0)', letterSpacing: '0.05em', marginBottom: 6 }}>
+          {planName}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--tx-3)' }}>
+          {member ? `有效期至 ${expires}` : '开通会员解锁全部 AI 解读与命书'}
+        </div>
+        {!member && (
+          <Link href="/pricing" className="mv-btn mv-btn-primary mv-btn-block" style={{ marginTop: 16, textDecoration: 'none' }}>开通会员</Link>
         )}
+      </div>
 
-        {/* 命盘历史 */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--tx-0)' }}>我的命盘（{charts.length}）</h2>
-          <Link href="/chart" style={{ fontSize: '13px', color: 'var(--ac)', textDecoration: 'none' }}>＋ 排新命盘</Link>
+      {isAdmin && (
+        <div className="mv-card" style={{ borderColor: 'rgba(212,168,67,0.35)' }}>
+          <div className="mv-label">管理员</div>
+          <div style={{ fontSize: 14, color: 'var(--tx-0)', marginBottom: 12 }}>你拥有系统管理权限</div>
+          <Link href="/admin" className="mv-btn mv-btn-ghost" style={{ textDecoration: 'none' }}>进入系统管理</Link>
         </div>
+      )}
+
+      {/* 命盘历史 */}
+      <div className="mv-section-title">我的命盘（{charts.length}）</div>
+      <div className="mv-card-flat">
         <ChartHistory charts={charts as unknown as ChartItem[]} />
+        <Link href="/chart" className="mv-btn mv-btn-ghost mv-btn-block" style={{ marginTop: 14, textDecoration: 'none' }}>＋ 排新命盘</Link>
       </div>
     </div>
   );

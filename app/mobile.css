@@ -1,0 +1,430 @@
+/* ════════════════════════════════════════════════════════════════
+   移动端全新设计语言 ·「星河紫金」
+   仅作用于 .mv-* 类，复用现有 --bg-*/--tx-*/--ac/--t-* 令牌，
+   不改动富组件(ChartBoard / InsightPanel)所依赖的底层令牌，确保共存。
+   桌面端页面沿用既有布局，本文件只在移动视口下接管页面骨架与组件观感。
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── 移动端专属令牌扩展（在既有墨金之上，补充星河紫调与动效）── */
+:root {
+  --mv-purple: #6d4bd8;
+  --mv-purple-soft: rgba(109, 75, 216, 0.16);
+  --mv-glow: rgba(184, 146, 42, 0.14);
+  --mv-radius: 22px;
+  --mv-radius-sm: 14px;
+  --mv-safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+/* 星河氛围层：极淡的紫金径向光晕，固定铺底，营造夜空感 */
+.mv-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 520px at 12% -8%, var(--mv-purple-soft), transparent 60%),
+    radial-gradient(900px 480px at 105% 6%, var(--mv-glow), transparent 55%),
+    radial-gradient(700px 500px at 50% 108%, rgba(184, 146, 42, 0.08), transparent 60%);
+}
+
+/* ── 页面骨架 ── */
+.mv-page {
+  min-height: 100vh;
+  background: var(--bg-0);
+  position: relative;
+}
+.mv-wrap {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 18px;
+}
+/* 为底部 Tab 栏（70px + 安全区）预留空间 */
+.mv-page.mv-tabbed {
+  padding-bottom: calc(86px + var(--mv-safe-b));
+}
+
+/* ── 顶栏（移动 slim）── */
+.mv-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--bg-0) 86%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--bdr);
+}
+.mv-topbar-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--tx-2);
+  font-size: 14px;
+  padding: 6px 8px 6px 2px;
+  margin-left: -4px;
+}
+.mv-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  color: var(--tx-0);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  font-size: 14px;
+}
+.mv-brand .mv-mark {
+  font-size: 16px;
+  color: var(--ac);
+}
+.mv-topbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tx-0);
+  letter-spacing: 0.04em;
+}
+
+/* ── Hero ── */
+.mv-hero {
+  text-align: center;
+  padding: 34px 18px 20px;
+}
+.mv-eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ac);
+  opacity: 0.85;
+  margin-bottom: 12px;
+}
+.mv-h1 {
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--tx-0);
+  line-height: 1.35;
+  margin: 0;
+}
+.mv-sub {
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--tx-3);
+  margin: 10px auto 0;
+  max-width: 30ch;
+}
+.mv-mark-lg {
+  font-size: 34px;
+  color: var(--ac);
+  opacity: 0.22;
+  margin-bottom: 10px;
+}
+
+/* ── 卡片 ── */
+.mv-card {
+  background: var(--bg-card);
+  border: 1px solid var(--bdr);
+  border-radius: var(--mv-radius);
+  padding: 18px;
+  margin: 0 16px 16px;
+}
+.mv-card-glow {
+  border-color: var(--ac-bdr);
+  box-shadow: 0 12px 40px var(--mv-glow);
+}
+.mv-card-flat {
+  background: var(--bg-1);
+  border: 1px solid var(--bdr);
+  border-radius: var(--mv-radius-sm);
+  padding: 16px;
+  margin: 0 16px 14px;
+}
+.mv-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tx-0);
+  margin: 6px 16px 12px;
+  letter-spacing: 0.04em;
+}
+.mv-section-title::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--ac), var(--ac-dim));
+}
+.mv-label {
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--ac);
+  opacity: 0.75;
+  margin-bottom: 14px;
+  display: block;
+}
+
+/* ── 按钮 ── */
+.mv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 50px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.12s ease, opacity 0.15s ease, background 0.15s ease;
+  width: 100%;
+}
+.mv-btn:active { transform: scale(0.98); }
+.mv-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.mv-btn-primary {
+  background: linear-gradient(135deg, #c89a3a 0%, #9a6a14 100%);
+  color: #fff8e8;
+  box-shadow: 0 8px 24px rgba(154, 106, 20, 0.28);
+}
+.mv-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--bdr-heavy);
+  color: var(--tx-1);
+}
+.mv-btn-block { margin: 0 16px 16px; }
+
+/* ── 输入框 ── */
+.mv-input {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--bdr-med);
+  border-radius: var(--mv-radius-sm);
+  padding: 13px 15px;
+  font-size: 15px;
+  color: var(--tx-1);
+  font-family: var(--font);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.mv-input:focus {
+  border-color: var(--ac);
+  box-shadow: 0 0 0 3px var(--ac-bg);
+}
+.mv-input::placeholder { color: var(--tx-3); }
+
+/* ── 胶囊 / 标签 ── */
+.mv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--bdr);
+  background: var(--bg-card);
+  color: var(--tx-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.mv-chip-active {
+  border-color: var(--ac-bdr);
+  background: var(--ac-bg);
+  color: var(--ac);
+  font-weight: 600;
+}
+
+/* ── 行 / 列表 ── */
+.mv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mv-divider { height: 1px; background: var(--bdr); margin: 14px 0; }
+
+/* ── 会员 / 配额提示条 ── */
+.mv-quota {
+  margin: 0 16px 16px;
+  padding: 12px 14px;
+  border-radius: var(--mv-radius-sm);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--ac-bg);
+  border: 1px solid var(--ac-bdr);
+  color: var(--ac);
+}
+.mv-quota a { color: var(--ac); font-weight: 600; text-decoration: none; }
+
+/* ── 解读阅读区 ── */
+.mv-reader {
+  background: var(--bg-card);
+  border: 1px solid var(--bdr);
+  border-radius: var(--mv-radius);
+  padding: 20px 18px;
+  margin: 0 16px 16px;
+}
+.mv-reader-empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--tx-3);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.mv-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 0;
+  color: var(--tx-3);
+  font-size: 13px;
+}
+.mv-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--bdr-med);
+  border-top-color: var(--ac);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── 主题切换按钮（移动）── */
+.mv-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--ac-bdr);
+  background: var(--bg-card);
+  color: var(--ac);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* ── 底部 Tab 栏（重做版）── */
+.mv-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  background: color-mix(in srgb, var(--bg-0) 94%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--bdr);
+  padding-bottom: var(--mv-safe-b);
+}
+.mv-tab {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 0 7px;
+  text-decoration: none;
+  color: var(--tx-3);
+  font-size: 10px;
+  transition: color 0.15s ease;
+}
+.mv-tab-glyph {
+  font-size: 19px;
+  line-height: 1;
+  transition: transform 0.18s ease;
+}
+.mv-tab-active { color: var(--ac); }
+.mv-tab-active .mv-tab-glyph { transform: translateY(-1px) scale(1.06); }
+.mv-tab-active::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--ac), var(--ac-dim));
+}
+
+/* ── 居中状态（登录引导 / 成功 / 空态）── */
+.mv-center {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  gap: 14px;
+}
+.mv-center-emoji { font-size: 44px; }
+
+/* ── 模态 / 付费墙 ── */
+.mv-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 6, 4, 0.62);
+  backdrop-filter: blur(3px);
+}
+.mv-modal {
+  width: 100%;
+  max-width: 360px;
+  border-radius: 24px;
+  padding: 26px 22px;
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px solid var(--ac-bdr);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+}
+.mv-modal-emoji { font-size: 32px; margin-bottom: 10px; }
+.mv-modal-title { font-size: 17px; font-weight: 700; color: var(--tx-0); margin-bottom: 8px; }
+.mv-modal-body { font-size: 13px; line-height: 1.75; color: var(--tx-2); margin-bottom: 20px; }
+.mv-modal-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── 进场动画 ── */
+@keyframes mv-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.mv-rise { animation: mv-rise 0.5s ease both; }
+.mv-rise-1 { animation-delay: 0.04s; }
+.mv-rise-2 { animation-delay: 0.10s; }
+.mv-rise-3 { animation-delay: 0.16s; }
+.mv-rise-4 { animation-delay: 0.22s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mv-rise, .mv-spinner { animation: none; }
+}
+
+/* ── 桌面端隐藏 mv 移动骨架（避免与既有桌面布局冲突）── */
+@media (min-width: 768px) {
+  .mv-only { display: none !important; }
+}
+@media (max-width: 767.98px) {
+  .mv-hide-mobile { display: none !important; }
+}

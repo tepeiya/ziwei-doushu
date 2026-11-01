@@ -20,71 +20,45 @@ export default function KnowledgeHomePage() {
   const STAR_DESCRIPTIONS_QUICK = STAR_BRIEF_SEO;
 
   return (
-    <div className="with-tabbar" style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+    <div className="mv-page mv-tabbed" style={{ background: 'var(--bg-0)' }}>
       <SiteNav />
-      {/* Hero */}
-      <div className="text-center px-6 py-14">
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <div style={{ height: '1px', width: '48px', background: 'linear-gradient(to right, transparent, rgba(184,146,42,0.4))' }} />
-          <span style={{ fontSize: '11px', color: 'var(--ac)', letterSpacing: '0.4em' }}>KNOWLEDGE BASE</span>
-          <div style={{ height: '1px', width: '48px', background: 'linear-gradient(to left, transparent, rgba(184,146,42,0.4))' }} />
-        </div>
-        <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: 700, color: 'var(--tx-0)', letterSpacing: '0.15em', marginBottom: '12px' }}>
-          紫微斗数知识库
-        </h1>
-        <p style={{ fontSize: '14px', color: 'var(--tx-2)', letterSpacing: '0.08em', maxWidth: '600px', margin: '0 auto', lineHeight: 1.7 }}>
+
+      <div className="mv-hero">
+        <div className="mv-mark-lg">✦</div>
+        <span className="mv-eyebrow">KNOWLEDGE BASE</span>
+        <h1 className="mv-h1">紫微斗数知识库</h1>
+        <p className="mv-sub">
           14 主星 × 13 宫位 = <strong style={{ color: 'var(--ac)' }}>{ALL_STARS.length * ALL_TOPICS.length}</strong> 项专题<br />
           基于传统《天纪》体系编纂 · 含古籍引证
         </p>
       </div>
 
-      {/* 14 主星卡片 */}
-      <div className="max-w-5xl mx-auto px-6 pb-20">
-        <div style={{ fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.3em', textAlign: 'center', marginBottom: '24px' }}>
-          十四主星
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="mv-section-title">十四主星</div>
+      <div style={{ padding: '0 16px 8px' }}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {ALL_STARS.map(star => (
             <Link
               key={star}
               href={`/knowledge/${STAR_TO_SLUG[star]}/overview`}
-              style={{
-                display: 'block',
-                padding: '14px 10px',
-                background: 'var(--bg-card)',
-                border: '1px solid rgba(184,146,42,0.2)',
-                borderRadius: '10px',
-                textDecoration: 'none',
-                textAlign: 'center',
-                transition: 'all 0.2s',
-              }}
-              className="hover:shadow-md hover:border-amber-400"
+              className="mv-card-flat"
+              style={{ textDecoration: 'none', textAlign: 'center', display: 'block' }}
             >
-              <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--tx-0)', letterSpacing: '0.15em' }}>
-                {star}
-              </div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--tx-0)', letterSpacing: '0.15em' }}>{star}</div>
             </Link>
           ))}
         </div>
+      </div>
 
-        {/* 详细列表（每个主星 + 简介 + 进入按钮） */}
-        <div className="mt-14 space-y-4">
+      <div className="mv-section-title">主星详解</div>
+      <div style={{ padding: '0 16px 16px' }}>
+        <div className="flex flex-col gap-3">
           {ALL_STARS.map(star => (
-            <div key={star} style={{
-              background: 'var(--bg-card)',
-              border: '1px solid rgba(184,146,42,0.18)',
-              borderRadius: '12px',
-              padding: '18px 22px',
-            }}>
+            <div key={star} className="mv-card-flat">
               <div className="flex items-baseline gap-3 mb-2">
-                <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--tx-0)', letterSpacing: '0.1em' }}>
-                  {star}星
-                </span>
-                <span style={{ fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.15em' }}>
-                  ZI WEI · 14 STARS
-                </span>
+                <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--tx-0)', letterSpacing: '0.1em' }}>{star}星</span>
+                <span style={{ fontSize: 11, color: 'var(--tx-3)', letterSpacing: '0.15em' }}>ZI WEI · 14 STARS</span>
               </div>
-              <p style={{ fontSize: '12px', color: 'var(--tx-2)', lineHeight: 1.7, marginBottom: '12px' }}>
+              <p style={{ fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.7, marginBottom: 12 }}>
                 {STAR_DESCRIPTIONS_QUICK[star] || ''}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -95,15 +69,8 @@ export default function KnowledgeHomePage() {
                     <Link
                       key={t}
                       href={`/knowledge/${STAR_TO_SLUG[star]}/${t}`}
-                      style={{
-                        fontSize: '11px',
-                        padding: '4px 10px',
-                        background: 'rgba(184,146,42,0.06)',
-                        border: '1px solid rgba(184,146,42,0.15)',
-                        borderRadius: '999px',
-                        color: 'var(--tx-2)',
-                        textDecoration: 'none',
-                      }}
+                      className="mv-chip"
+                      style={{ textDecoration: 'none' }}
                     >
                       入{k.palaceName} · {TOPIC_LABEL[t]}
                     </Link>
@@ -113,21 +80,18 @@ export default function KnowledgeHomePage() {
             </div>
           ))}
         </div>
+      </div>
 
-        {/* 名人命盘：公开文献出生日期构成的兴趣案例，点击深链到 /chart 自动排盘 */}
-        <div className="mt-14">
-          <div style={{ fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.3em', textAlign: 'center', marginBottom: '18px' }}>
-            名人命盘
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {FAMOUS_PERSONS.slice(0, 3).map(person => (
-              <FamousPersonCard
-                key={person.id}
-                person={person}
-                shareHref={`/chart?y=${person.year}&m=${person.month}&d=${person.day}&h=${person.hour === 0 ? 23 : person.hour * 2 - 1}&mi=0&g=${person.gender === 'male' ? 'm' : 'f'}&n=${encodeURIComponent(person.name)}`}
-              />
-            ))}
-          </div>
+      <div className="mv-section-title">名人命盘</div>
+      <div style={{ padding: '0 16px 24px' }}>
+        <div className="flex flex-col gap-3">
+          {FAMOUS_PERSONS.slice(0, 3).map(person => (
+            <FamousPersonCard
+              key={person.id}
+              person={person}
+              shareHref={`/chart?y=${person.year}&m=${person.month}&d=${person.day}&h=${person.hour === 0 ? 23 : person.hour * 2 - 1}&mi=0&g=${person.gender === 'male' ? 'm' : 'f'}&n=${encodeURIComponent(person.name)}`}
+            />
+          ))}
         </div>
       </div>
     </div>

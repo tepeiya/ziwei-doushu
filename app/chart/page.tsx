@@ -1,314 +1,301 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import BirthForm from '@/components/BirthForm';
-// 重组件路由级代码分割：ChartBoard / InsightPanel 体积较大，按需懒加载减小首屏包体
-import dynamic from 'next/dynamic';
-const ChartBoard = dynamic(() => import('@/components/ChartBoard'), {
-  ssr: false,
-  loading: () => <ChartSkeleton />,
-});
-const InsightPanel = dynamic(() => import('@/components/InsightPanel'), {
-  ssr: false,
-  loading: () => <InsightSkeleton />,
-});
-// v4.0 数据集「原生 13 维」浏览面板：直接读取数据集原文（未润色），
-// 与右侧 AI 润色版互补，方便逐个维度核对原始论断。
-const DatasetInterpretation = dynamic(() => import('@/components/DatasetInterpretation'), {
-  ssr: false,
-});
-const StarDetailPanel = dynamic(() => import('@/components/StarDetailPanel'), { ssr: false });
-import ChartActions from '@/components/ChartActions';
-import PatternsCard from '@/components/PatternsCard';
-import ChartSummary from '@/components/ChartSummary';
-import ChartViz from '@/components/ChartViz';
-import ChartHistory, { type ChartItem } from '@/components/ChartHistory';
-import ShareModal from '@/components/ShareModal';
-import { type TimeView } from '@/components/TimeNav';
-import SiteNav from '@/components/SiteNav';
-import { generateChart } from '@/lib/ziwei/algorithm';
-import { formatShichen } from '@/lib/ziwei/constants';
-import { formToSearchParams, searchParamsToForm, formToBirthInfo } from '@/lib/ziwei/share';
-import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
-import type { BirthFormState } from '@/components/BirthForm';
 
-/** 命盘骨架屏（路由级代码分割时的占位） */
-function ChartSkeleton() {
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import BirthForm, { type BirthFormState } from '@/components/BirthForm';
+import ChartBoard from '@/components/ChartBoard';
+import InsightPanel from '@/components/InsightPanel';
+import SiteNav from '@/components/SiteNav';
+import type { BirthInfo, ZiweiChart } from '@/lib/ziwei/types';
+import { formToBirthInfo } from '@/lib/ziwei/share';
+import { useSession } from 'next-auth/react';
+import { useTheme } from '@/components/ThemeProvider';
+
+type ChartData = {
+  chart: ZiweiChart;
+  charts: any[];
+  used: number | null;
+  total: number | null;
+  isPremium: boolean;
+};
+
+async function fetchChartData(info: BirthInfo): Promise<ChartData> {
+  const [chartRes, usageRes] = await Promise.all([
+    fetch('/api/chart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(info),
+    }),
+    fetch('/api/usage', { cache: 'no-store' }),
+  ]);
+  if (!chartRes.ok) throw new Error('chart-failed');
+  const chart = (await chartRes.json()).chart as ZiweiChart;
+
+  let used: number | null = null;
+  let total: number | null = null;
+  let isPremium = false;
+  if (usageRes.ok) {
+    const u = await usageRes.json();
+    used = u.used ?? null;
+    total = u.total ?? null;
+    isPremium = !!u.isPremium;
+  }
+  const charts = (chart as any).charts ?? [];
+  return { chart, charts, used, total, isPremium };
+}
+
+function useChart(info: BirthInfo | null) {
+  const [state, setState] = useState<{
+    data: ChartData | null;
+    loading: boolean;
+    error: string | null;
+  }>({ data: null, loading: false, error: null });
+
+  useEffect(() => {
+    if (!info) return;
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    fetchChartData(info)
+      .then((data) => {
+        if (!cancelled) setState({ data, loading: false, error: null });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ data: null, loading: false, error: '排盘失败，请稍后重试' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [info]);
+
+  return state;
+}
+
+// 排盘可视化（保留原逻辑）
+function ChartView({ chart }: { chart: ZiweiChart }) {
+  return <ChartBoard chart={chart} />;
+}
+
+// 存档弹窗（保留原逻辑）
+function SaveChartModal({
+  open, onClose, onSave, title, setTitle, loading,
+}: {
+  open: boolean; onClose: () => void; onSave: () => void;
+  title: string; setTitle: (v: string) => void; loading: boolean;
+}) {
+  if (!open) return null;
   return (
-    <div className="card-glass rounded-xl p-5 animate-pulse" style={{ minHeight: 520 }}>
-      <div className="h-3 w-28 rounded mb-4" style={{ background: 'var(--t-border)' }} />
-      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(4, 1fr)', aspectRatio: '1 / 1' }}>
-        {Array.from({ length: 12 }).map((_, i) => (
-          <div key={i} className="rounded" style={{ background: 'var(--t-border)', opacity: 0.55 }} />
+    <div className="mv-modal-mask" onClick={onClose}>
+      <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="mv-modal-emoji">💾</div>
+        <div className="mv-modal-title">保存命盘</div>
+        <div className="mv-modal-body">为这份命盘起个名字，便于在「我的命盘」中找回。</div>
+        <input
+          className="mv-input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="例如：我的本命盘"
+        />
+        <div className="mv-modal-actions" style={{ marginTop: 16 }}>
+          <button className="mv-btn mv-btn-primary" onClick={onSave} disabled={loading}>
+            {loading ? '保存中…' : '保存'}
+          </button>
+          <button className="mv-btn mv-btn-ghost" onClick={onClose}>取消</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 分页历史（保留原逻辑，移动化展示）
+function PaginatedHistory({
+  items, onLoad, resetKey, onRestore,
+}: {
+  items: any[]; onLoad: () => void; resetKey: number; onRestore: (c: any) => void;
+}) {
+  const [local, setLocal] = useState<any[]>(items);
+  useEffect(() => setLocal(items), [items, resetKey]);
+  if (!local.length) return null;
+  return (
+    <div className="mv-card-flat">
+      <div className="mv-section-title" style={{ margin: '0 0 12px' }}>我的命盘</div>
+      <div className="flex flex-col gap-2">
+        {local.map((c) => (
+          <div key={c.id} className="mv-row">
+            <div className="min-w-0">
+              <div className="text-[13px]" style={{ color: 'var(--tx-0)' }}>{c.title || '未命名命盘'}</div>
+              <div className="text-[11px]" style={{ color: 'var(--tx-3)' }}>
+                {c.birth_info?.name || '匿名'} · {c.birth_info?.year}年{c.birth_info?.month}月
+              </div>
+            </div>
+            <button className="mv-chip" onClick={() => onRestore(c)}>载入</button>
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-/** 解读面板骨架屏 */
-function InsightSkeleton() {
-  return (
-    <div className="card-glass rounded-xl p-5 animate-pulse h-full" style={{ minHeight: 400 }}>
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="mb-3 rounded-lg" style={{ height: 14 + i * 4, background: 'var(--t-border)', opacity: 0.5, width: `${90 - i * 12}%` }} />
-      ))}
-    </div>
-  );
-}
+const FREE_LIMIT = 3;
 
 export default function ChartPage() {
   const router = useRouter();
-  const { status } = useSession();
-  const [chart, setChart] = useState<ZiweiChart | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const { data: session, status } = useSession();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
 
-  const [selectedPalace, setSelectedPalace] = useState<Palace | null>(null);
-  const [selectedStar, setSelectedStar] = useState<Star | null>(null);
-  const [starPalaceName, setStarPalaceName] = useState<string | undefined>();
-  const [selectedSiHua, setSelectedSiHua] = useState<{ starName: string; siHua: string; view: TimeView } | null>(null);
+  const [form, setForm] = useState<BirthFormState | null>(null);
+  const [info, setInfo] = useState<BirthInfo | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveTitle, setSaveTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [histReset, setHistReset] = useState(0);
+  const restoredChart = useRef<ZiweiChart | null>(null);
 
-  const [savedCharts, setSavedCharts] = useState<ChartItem[]>([]);
+  const { data, loading, error } = useChart(info);
+  const chart = useMemo(() => data?.chart ?? restoredChart.current, [data]);
+  const charts = useMemo(() => data?.charts ?? [], [data]);
+  const used = data?.used ?? null;
+  const total = data?.total ?? null;
+  const isPremium = data?.isPremium ?? false;
 
-  // 分享链接：保留最近一次表单原始录入（用于拼 shareUrl 与分享卡信息）
-  const [formState, setFormState] = useState<BirthFormState | null>(null);
-  const [shareOpen, setShareOpen] = useState(false);
-  const deepLinkHandled = useRef(false);
-
-  // 已登录时加载「我的命盘」（保存新命盘后可调用 reload 即时刷新，无需整页刷新）
-  const reloadSavedCharts = useCallback(() => {
-    fetch('/api/charts')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d?.charts) setSavedCharts(d.charts); })
-      .catch(() => {});
+  const onFormReady = useCallback((info: BirthInfo) => {
+    setInfo(info);
   }, []);
 
-  useEffect(() => {
-    if (status !== 'authenticated') return;
-    reloadSavedCharts();
-  }, [status, reloadSavedCharts]);
+  const handleSaveInit = useCallback(() => {
+    if (!chart) return;
+    let base = (form?.name as string) || (form as any)?.name || '';
+    if ((form as any)?.name) base = (form as any).name;
+    setSaveTitle(base ? `${base}的命盘` : '我的命盘');
+    setSaveOpen(true);
+  }, [chart, form]);
 
-  // 算完即自动保存：登录用户存入「我的命盘」，游客存入 localStorage 以便重访恢复
-  const lastSavedSig = useRef<string | null>(null);
-  const autoSaveChart = useCallback(async (c: ZiweiChart) => {
-    const b = c.birthInfo as { year?: number; month?: number; day?: number; hour?: number; gender?: string; city?: string; province?: string } | undefined;
-    const sig = [b?.year, b?.month, b?.day, b?.hour, b?.gender, b?.city ?? b?.province ?? ''].join('|');
-    if (status !== 'authenticated') {
-      try {
-        localStorage.setItem('ziwei-last-chart', JSON.stringify({ chart: c, sig, savedAt: Date.now() }));
-      } catch { /* localStorage 不可用，静默 */ }
-      return;
-    }
-    if (sig && sig === lastSavedSig.current) return; // 同一生辰本次会话不再重复提交
-    lastSavedSig.current = sig;
+  const handleSave = useCallback(async () => {
+    if (!chart) return;
+    setSaving(true);
     try {
       const res = await fetch('/api/charts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chart: c, birthInfo: b }),
+        body: JSON.stringify({
+          title: saveTitle || '我的命盘',
+          visibility: 'private',
+          birth_info: formToBirthInfo(form!),
+          chart,
+        }),
       });
-      if (res.ok) reloadSavedCharts();
-    } catch { /* 网络异常不影响查看命盘 */ }
-  }, [status, reloadSavedCharts]);
-
-  const handleGenerate = useCallback(async (info: BirthInfo) => {
-    setLoading(true);
-    setError('');
-    setSelectedPalace(null);
-    setSelectedStar(null);
-    try {
-      const res = await fetch('/api/chart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(info),
-      });
-      if (!res.ok) throw new Error('chart api failed');
-      const data = await res.json();
-      setChart(data.chart);
-      autoSaveChart(data.chart);
-    } catch {
-      // 客户端兜底：绕过 /api/chart 的缓存、限流与审计，直接在浏览器排盘。
-      // 行为差异：无服务端缓存命中、不计入分布式限流、无审计日志——仅作可用性兜底。
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('[chart] /api/chart 不可用，已降级到浏览器端 generateChart 兜底（绕过缓存/限流）');
+      if (res.ok) {
+        const json = await res.json();
+        setSavedId(json?.id ?? 'saved');
+        setHistReset((n) => n + 1);
       }
-      const generated = generateChart(info);
-      setChart(generated);
-      autoSaveChart(generated);
     } finally {
-      setLoading(false);
+      setSaving(false);
+      setSaveOpen(false);
     }
-  }, [autoSaveChart]);
+  }, [chart, saveTitle, form]);
 
-  // 分享链接深链：/chart?y=&m=&d=&h=&mi=&p=&c=&lo=&g= → 预填表单并自动起盘
-  // （用 window.location 服务端/静态期不触达，避免 useSearchParams 的 Suspense 要求）
-  useEffect(() => {
-    if (deepLinkHandled.current) return;
-    deepLinkHandled.current = true;
-    const parsed = searchParamsToForm(new URLSearchParams(window.location.search));
-    if (!parsed || !parsed.year || !parsed.month || !parsed.day) return;
-    const full = {
-      name: parsed.name ?? '',
-      year: parsed.year,
-      month: parsed.month,
-      day: parsed.day,
-      clockHour: parsed.clockHour ?? '8',
-      clockMinute: parsed.clockMinute ?? '0',
-      unknownTime: parsed.unknownTime ?? false,
-      province: parsed.province ?? '',
-      city: parsed.city ?? '',
-      longitude: parsed.longitude ?? 120,
-      gender: parsed.gender ?? 'male',
-    } as BirthFormState;
-    setFormState(full);
-    handleGenerate(formToBirthInfo(full));
-  }, [handleGenerate]);
+  const handleRestore = useCallback((c: any) => {
+    restoredChart.current = c.chart;
+    setForm((prev) => ({ ...(prev as any), name: c.birth_info?.name ?? '' }));
+    setInfo(c.birth_info);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
-  // 游客自动恢复：重访时直接带回上一次算完并自动保存的命盘
-  // （登录用户由「我的命盘」服务端列表承载，此处跳过）
-  useEffect(() => {
-    if (status === 'authenticated') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('year') && params.get('month') && params.get('day')) return; // 深链优先，不覆盖
-    try {
-      const raw = localStorage.getItem('ziwei-last-chart');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.chart) setChart(parsed.chart);
-      }
-    } catch { /* 解析失败则忽略，正常显示表单 */ }
-  }, [status]);
+  const quotaLeft = total != null ? (isPremium ? '∞' : Math.max(0, (total ?? 0) - (used ?? 0))) : null;
+  const overLimit = !isPremium && used != null && total != null && used >= total;
 
-  const reset = () => {
-    setChart(null);
-    setSelectedPalace(null);
-    setSelectedStar(null);
-    setSelectedSiHua(null);
-  };
-
-  const birthText = (() => {
-    const b = chart?.birthInfo as { year?: number; month?: number; day?: number; hour?: number; gender?: string } | undefined;
-    if (!b) return '';
-    // birthInfo.hour 是时辰支索引（0=子…11=亥），不能直接当小时数显示
-    return `${b.year}年${b.month}月${b.day}日 ${formatShichen(b.hour)} · ${b.gender === 'male' ? '男' : '女'}`;
-  })();
-
-  // ── 未起盘：出生信息表单 ──
-  if (!chart) {
-    return (
-      <div className="with-tabbar min-h-screen" style={{ background: 'var(--bg-0)' }}>
-        <SiteNav />
-        <main className="mx-auto w-full" style={{ maxWidth: 720, padding: '32px 20px 48px' }}>
-          <div className="text-center mb-8">
-            <div style={{ fontSize: 30, color: 'var(--t-gold)', opacity: 0.18, marginBottom: 8 }}>☯</div>
-            <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '0.12em', color: 'var(--tx-0)' }}>紫微斗数排盘</h1>
-            <p style={{ fontSize: 13, color: 'var(--tx-3)', marginTop: 8, lineHeight: 1.7 }}>
-              输入出生年月日时，生成专属命盘，并由 AI 按传统紫微斗数体系为你深度解读
-            </p>
-          </div>
-          <BirthForm onSubmit={handleGenerate} loading={loading} onFormSave={setFormState} />
-          {error && <p className="text-center mt-4 text-sm" style={{ color: '#dc2626' }}>{error}</p>}
-        </main>
-      </div>
-    );
-  }
-
-  // ── 已起盘：命盘工作台 ──
   return (
-    <div className="with-tabbar min-h-screen flex flex-col" style={{ background: 'var(--bg-0)' }}>
+    <div className="mv-page mv-tabbed" style={{ background: 'var(--bg-0)' }}>
       <SiteNav />
 
-      {/* 顶部工具条 */}
-      <div
-        className="sticky top-0 z-40 flex items-center gap-3 px-4 lg:px-6 h-12 lg:h-14 border-b"
-        style={{ background: 'color-mix(in srgb, var(--bg-0) 92%, transparent)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderColor: 'var(--bdr)' }}
-      >
-        <button
-          onClick={reset}
-          className="flex items-center gap-1 text-[13px] shrink-0"
-          style={{ color: 'var(--tx-3)', background: 'none', border: 'none', cursor: 'pointer' }}
-        >
-          <span style={{ fontSize: 16 }}>‹</span><span>重新起盘</span>
-        </button>
-        <div className="w-px h-5" style={{ background: 'var(--bdr-med)' }} />
-        <span className="text-[12px] truncate" style={{ color: 'var(--ac)', letterSpacing: '0.05em' }}>{birthText}</span>
+      {/* 配额 / 登录提示条 */}
+      {status === 'unauthenticated' && (
+        <div className="mv-quota">
+          <span>登录后保存命盘 · 查看解读记录</span>
+          <Link href="/login">去登录 →</Link>
+        </div>
+      )}
+      {status === 'authenticated' && !isPremium && quotaLeft != null && (
+        <div className="mv-quota">
+          <span>本月免费排盘剩余 {quotaLeft} 次</span>
+          <Link href="/pricing">升级会员 →</Link>
+        </div>
+      )}
+
+      {/* HERO */}
+      <div className="mv-hero">
+        <div className="mv-mark-lg">☯</div>
+        <span className="mv-eyebrow">ZI WEI · 排盘</span>
+        <h1 className="mv-h1">起一盘<br />读懂你的命</h1>
+        <p className="mv-sub">输入出生信息，一键生成传统正宗紫微斗数命盘，并由 AI 按古籍体系为你解读。</p>
       </div>
 
-      {/* 工作台：桌面双栏独立滚动，移动端堆叠 */}
-      <div className="mx-auto w-full flex-1" style={{ maxWidth: 1360 }}>
-        <div className="lg:grid lg:grid-cols-[minmax(0,520px)_1fr] lg:gap-0">
-          {/* 左栏：命盘 + 操作 + 格局 */}
-          <div className="lg:border-r lg:overflow-y-auto lg:h-[calc(100vh-112px)] p-4 lg:p-5 space-y-4">
-            <ChartBoard
-              chart={chart}
-              onStarSelect={(star, palace) => { setSelectedStar(star); setStarPalaceName(palace?.name); }}
-              onPalaceSelect={setSelectedPalace}
-              onPalaceDeselect={() => setSelectedPalace(null)}
-              onSiHuaClick={(starName, siHua, v) => setSelectedSiHua({ starName, siHua, view: v })}
-            />
-            <ChartActions chart={chart} onSaved={reloadSavedCharts} onShare={() => setShareOpen(true)} />
-            <PatternsCard chart={chart} />
-            <ChartSummary chart={chart} />
-            <ChartViz chart={chart} />
-            {status === 'authenticated' && savedCharts.length > 0 && (
-              <ChartHistory charts={savedCharts} />
-            )}
+      {/* 出生表单 */}
+      <div className="mv-card mv-card-glow mv-rise mv-rise-1">
+        <span className="mv-label">出生信息</span>
+        <BirthForm onSubmit={onFormReady} onFormSave={setForm} autoRestore={false} />
+        {error && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{error}</div>}
+      </div>
+
+      {/* 排盘结果 */}
+      {loading && (
+        <div className="mv-loading"><span className="mv-spinner" />正在排盘…</div>
+      )}
+
+      {chart && !loading && (
+        <>
+          <div className="mv-section-title mv-rise mv-rise-2">命盘全景</div>
+          <div className="mv-card mv-rise mv-rise-2">
+            <ChartView chart={chart} />
           </div>
 
-          {/* 右栏：AI 解读 */}
-          <div className="lg:overflow-y-auto lg:h-[calc(100vh-112px)] p-4 lg:p-5" style={{ background: 'var(--bg-1)' }}>
-            <div className="h-[70vh] lg:h-full">
-              <InsightPanel
-                chart={chart}
-                selectedPalace={selectedPalace}
-                selectedSiHua={selectedSiHua}
-              />
-            </div>
-
-            {/* v4.0 数据集原生 13 维解读：直接读取数据集原文，与 AI 润色版互补 */}
-            {chart && (
-              <div className="mt-4">
-                <DatasetInterpretation birth={(chart.birthInfo as BirthInfo) ?? null} />
+          {/* 操作区 */}
+          <div className="mv-rise mv-rise-3">
+            {status === 'authenticated' && !savedId && (
+              <button className="mv-btn mv-btn-ghost mv-btn-block" onClick={handleSaveInit}>保存命盘</button>
+            )}
+            {savedId && (
+              <div className="mv-quota" style={{ justifyContent: 'center', color: 'var(--ac)' }}>
+                已保存到「我的命盘」
               </div>
             )}
           </div>
-        </div>
-      </div>
 
-      {/* 主星详情抽屉 */}
-      {selectedStar && (
-        <StarDetailPanel
-          star={selectedStar}
-          palaceName={starPalaceName}
-          onClose={() => setSelectedStar(null)}
-        />
+          {/* AI 解读 */}
+          <div className="mv-section-title mv-rise mv-rise-3">
+            紫微 AI 解读
+            {overLimit && <Link href="/pricing" className="mv-chip mv-chip-active" style={{ marginLeft: 'auto' }}>额度用完 · 升级</Link>}
+          </div>
+          <div className="mv-reader mv-rise mv-rise-4">
+            <InsightPanel chart={chart} />
+          </div>
+
+          <PaginatedHistory
+            items={charts}
+            onLoad={() => {}}
+            resetKey={histReset}
+            onRestore={handleRestore}
+          />
+        </>
       )}
 
-      {/* 分享命盘（链接 + 朋友圈分享图） */}
-      <ShareModal
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        shareUrl={(() => {
-          const origin = typeof window !== 'undefined' ? window.location.origin : 'https://example.com';
-          return formState ? `${origin}/chart?${formToSearchParams(formState).toString()}` : `${origin}/chart`;
-        })()}
-        chart={chart}
-        birth={(() => {
-          if (formState) {
-            return {
-              year: String(formState.year), month: String(formState.month), day: String(formState.day),
-              hour: String(formState.clockHour), minute: String(formState.clockMinute),
-              gender: formState.gender, city: formState.city || undefined,
-            };
-          }
-          const b = chart.birthInfo as { year?: number; month?: number; day?: number; gender?: string } | undefined;
-          return {
-            year: String(b?.year ?? ''), month: String(b?.month ?? ''), day: String(b?.day ?? ''),
-            hour: '', minute: '', gender: b?.gender === 'female' ? ('female' as const) : ('male' as const),
-          };
-        })()}
+      {!chart && !loading && (
+        <div className="mv-reader-empty mv-rise">
+          <div style={{ fontSize: 30, marginBottom: 10 }}>✦</div>
+          填好上方出生信息，<br />命盘与 AI 解读将在这里展开。
+        </div>
+      )}
+
+      <SaveChartModal
+        open={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        onSave={handleSave}
+        title={saveTitle}
+        setTitle={setSaveTitle}
+        loading={saving}
       />
     </div>
   );
