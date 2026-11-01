@@ -11,6 +11,7 @@
  * 网关调用用 fetch。商户密钥就绪即可真实收款；本文件不依赖任何第三方支付依赖。
  */
 import crypto from 'crypto';
+import { paymentConfigFromEnv, type PaymentConfig } from '@/lib/payment-config';
 
 export type Gateway = 'wechat' | 'alipay';
 
@@ -138,19 +139,21 @@ export function verifyAlipaySign(
 }
 
 /** 当前已配置的真实支付渠道（无则返回 null → 调用方回退沙箱） */
-export function getConfiguredChannel(): Gateway | null {
-  if (process.env.WECHAT_APP_ID && process.env.WECHAT_MCH_ID && process.env.WECHAT_API_KEY) return 'wechat';
-  if (process.env.ALIPAY_APP_ID && process.env.ALIPAY_PRIVATE_KEY && process.env.ALIPAY_PUBLIC_KEY)
-    return 'alipay';
+export function getConfiguredChannel(cfg: PaymentConfig = paymentConfigFromEnv()): Gateway | null {
+  if (cfg.wechatAppId && cfg.wechatMchId && cfg.wechatApiKey) return 'wechat';
+  if (cfg.alipayAppId && cfg.alipayPrivateKey && cfg.alipayPublicKey) return 'alipay';
   return null;
 }
 
 /** 调用真实网关下单，返回 code_url / redirectUrl；失败返回 null */
-export async function createPayment(input: PaymentInput): Promise<PaymentResult | null> {
+export async function createPayment(
+  input: PaymentInput,
+  cfg: PaymentConfig = paymentConfigFromEnv(),
+): Promise<PaymentResult | null> {
   if (input.channel === 'wechat') {
-    const appId = process.env.WECHAT_APP_ID!;
-    const mchId = process.env.WECHAT_MCH_ID!;
-    const apiKey = process.env.WECHAT_API_KEY!;
+    const appId = cfg.wechatAppId;
+    const mchId = cfg.wechatMchId;
+    const apiKey = cfg.wechatApiKey;
     const xml = buildWechatUnifiedOrderXml(input, appId, mchId, apiKey);
     try {
       const resp = await fetch('https://api.mch.weixin.qq.com/pay/unifiedorder', {
@@ -169,7 +172,7 @@ export async function createPayment(input: PaymentInput): Promise<PaymentResult 
   }
 
   if (input.channel === 'alipay') {
-    const appId = process.env.ALIPAY_APP_ID!;
+    const appId = cfg.alipayAppId;
     const params: Record<string, string> = {
       app_id: appId,
       method: 'alipay.trade.wap.pay',
@@ -186,7 +189,7 @@ export async function createPayment(input: PaymentInput): Promise<PaymentResult 
         product_code: 'QUICK_WAP_WAY',
       }),
     };
-    params.sign = alipaySign(params, process.env.ALIPAY_PRIVATE_KEY!);
+    params.sign = alipaySign(params, cfg.alipayPrivateKey);
     const query = new URLSearchParams(params).toString();
     return { gateway: 'alipay', redirectUrl: `https://openapi.alipay.com/gateway.do?${query}` };
   }
@@ -198,14 +201,15 @@ export async function createPayment(input: PaymentInput): Promise<PaymentResult 
 export function verifyCallback(
   channel: Gateway,
   payload: { xml?: string; params?: Record<string, string> },
+  cfg: PaymentConfig = paymentConfigFromEnv(),
 ): { ok: boolean; orderId?: string } {
   if (channel === 'wechat') {
-    const apiKey = process.env.WECHAT_API_KEY;
+    const apiKey = cfg.wechatApiKey;
     if (!apiKey || !payload.xml) return { ok: false };
     const r = verifyWechatNotify(payload.xml, apiKey);
     return { ok: r.ok, orderId: r.outTradeNo };
   }
-  const pub = process.env.ALIPAY_PUBLIC_KEY;
+  const pub = cfg.alipayPublicKey;
   const sign = payload.params?.sign;
   if (!pub || !sign || !payload.params) return { ok: false };
   return { ok: verifyAlipaySign(payload.params, pub, sign), orderId: payload.params.out_trade_no };

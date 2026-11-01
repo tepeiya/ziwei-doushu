@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ScrollIntroProps {
@@ -15,6 +15,10 @@ export default function ScrollIntro({ onComplete, skipLabel = '跳 过' }: Scrol
   // unrolled：卷轴是否已展开（控制内容浮现）
   const [visible, setVisible] = useState(true);
   const [unrolled, setUnrolled] = useState(false);
+  // onComplete 用 ref 包住：父组件常传内联箭头函数，直接依赖它会让 effect
+  // 在 1.9s setUnrolled 触发的 re-render 时被清理重建，t2/t3 计时被打断（时间轴整体漂移）
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     // 时间序列：
@@ -26,13 +30,13 @@ export default function ScrollIntro({ onComplete, skipLabel = '跳 过' }: Scrol
     // 4.2s        : visible = false，触发 onComplete
     const t1 = setTimeout(() => setUnrolled(true), 1900);
     const t2 = setTimeout(() => setVisible(false), 3500);
-    const t3 = setTimeout(onComplete, 4200);
+    const t3 = setTimeout(() => onCompleteRef.current(), 4200);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [onComplete]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSkip = () => {
     setVisible(false);
-    setTimeout(onComplete, 700);
+    setTimeout(() => onCompleteRef.current(), 700);
   };
 
   // 卷轴展开缓动：先快后慢（卷轴拉开的物理感）

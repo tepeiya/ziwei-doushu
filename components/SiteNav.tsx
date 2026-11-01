@@ -31,12 +31,14 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 function ThemeToggle({ compact = false }: { compact?: boolean }) {
-  const { theme, toggle } = useTheme();
+  const { theme, toggle, mounted } = useTheme();
   const isDark = theme === 'dark';
+  // 水合前不渲染图标/aria-label：服务端默认 dark，客户端可能读到 light，
+  // 提前渲染会导致 hydration mismatch（图标闪错一下）
   return (
     <button
       onClick={toggle}
-      aria-label={isDark ? '切换亮色主题' : '切换暗色主题'}
+      aria-label={mounted ? (isDark ? '切换亮色主题' : '切换暗色主题') : '切换主题'}
       className="flex items-center justify-center rounded-full border transition-colors"
       style={{
         width: compact ? 34 : 36,
@@ -47,7 +49,7 @@ function ThemeToggle({ compact = false }: { compact?: boolean }) {
         fontSize: 14,
       }}
     >
-      {isDark ? '☀' : '☾'}
+      {mounted ? (isDark ? '☀' : '☾') : ''}
     </button>
   );
 }

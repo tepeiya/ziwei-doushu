@@ -18,6 +18,8 @@ export default function Disclaimer() {
 
   return (
     <div
+      role="status"
+      className="disclaimer-banner"
       style={{
         position: 'fixed',
         bottom: 0,

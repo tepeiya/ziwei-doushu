@@ -1,5 +1,6 @@
 export const metadata = { title: '服务条款 · 紫微命盘', description: '紫微命盘服务条款与用户协议' };
 
+import Link from 'next/link';
 import SiteNav from '@/components/SiteNav';
 
 export default function TermsPage() {
@@ -50,7 +51,7 @@ export default function TermsPage() {
       <p>本平台的排盘引擎与解读数据集源自开源项目 <a href="https://github.com/Renhuai123/ziwei-doushu" style={{ color: 'var(--ac)' }}>ziwei-doushu</a>（作者：王多鱼AI）。其中代码基于 <strong>MIT 协议</strong>、数据集基于 <strong>CC BY 4.0 协议</strong>（可商用，须署名），我们已依规在「关于与署名」页致谢。古籍文献（骨髓赋、紫微斗数全书等）属公共版文献。我们对上述协议予以尊重与遵守。</p>
 
         <p style={{ marginTop: 48, fontSize: 12, color: 'var(--tx-3)' }}>
-          <a href="/privacy" style={{ color: 'var(--ac)' }}>隐私政策</a> · <a href="/" style={{ color: 'var(--ac)' }}>返回首页</a>
+          <Link href="/privacy" style={{ color: 'var(--ac)' }}>隐私政策</Link> · <Link href="/" style={{ color: 'var(--ac)' }}>返回首页</Link>
         </p>
       </main>
     </div>

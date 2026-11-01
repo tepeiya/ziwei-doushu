@@ -1,5 +1,6 @@
 export const metadata = { title: '隐私政策 · 紫微命盘', description: '紫微命盘隐私政策' };
 
+import Link from 'next/link';
 import SiteNav from '@/components/SiteNav';
 
 export default function PrivacyPage() {
@@ -58,7 +59,7 @@ export default function PrivacyPage() {
       <p>本政策可能不定期更新。重大变更将以显著方式通知。继续使用即表示同意更新后的版本。</p>
 
         <p style={{ marginTop: 48, fontSize: 12, color: 'var(--tx-3)' }}>
-          <a href="/terms" style={{ color: 'var(--ac)' }}>服务条款</a> · <a href="/" style={{ color: 'var(--ac)' }}>返回首页</a>
+          <Link href="/terms" style={{ color: 'var(--ac)' }}>服务条款</Link> · <Link href="/" style={{ color: 'var(--ac)' }}>返回首页</Link>
         </p>
       </main>
     </div>

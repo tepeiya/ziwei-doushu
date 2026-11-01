@@ -16,6 +16,7 @@ export default function RegisterPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!identifier || !password) { setErr('请填写账号和密码'); return; }
+    if (password.length < 6) { setErr('密码至少 6 位'); return; }
     setErr('');
     setLoading(true);
     try {

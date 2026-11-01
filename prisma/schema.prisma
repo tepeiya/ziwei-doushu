@@ -35,6 +35,8 @@ model User {
   passwordHash String?
   nickname     String?
   createdAt    DateTime      @default(now())
+  trialUses    Int           @default(0) // 已使用免费试用次数
+  role         String        @default("user") // 'user' | 'admin'
   memberships  Membership[]
   charts       SavedChart[]
   orders       Order[]
@@ -70,4 +72,11 @@ model Order {
   channel   String? // 'wechat' | 'alipay' | 'sandbox'
   createdAt DateTime    @default(now())
   paidAt    DateTime?
+}
+
+/// 后台可配置项（试用次数、套餐覆盖等），整体序列化为 JSON 存于 value。
+model Setting {
+  key       String   @id // 固定为 'app'
+  value     String
+  updatedAt DateTime @updatedAt
 }

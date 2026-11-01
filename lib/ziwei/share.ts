@@ -87,3 +87,33 @@ export function searchParamsToForm(params: URLSearchParams): Partial<BirthFormSt
     gender: params.get('g') === 'f' ? 'female' : 'male',
   };
 }
+
+/**
+ * 档案 BirthInfo → Partial<BirthFormState>（预填回显用）
+ *
+ * BirthInfo.hour 是时辰支索引（0=子…11=亥），无法还原精确钟表时间，
+ * 这里取每个时辰段的起始小时作近似：丑(1)→1 点、巳(5)→9 点；
+ * 0 取 0 点（00:00 同属子支，且不会触发晚子时换日造成日期偏移）。
+ * 得到的表单按真太阳时重算会回到同一时辰支，排盘结果一致。
+ * 主要用于「自动带入最近一次档案」的预填，时辰精度标注为估算。
+ */
+export function birthInfoToForm(b: {
+  year?: number; month?: number; day?: number; hour?: number;
+  gender?: string; name?: string; province?: string; city?: string; longitude?: number;
+}): Partial<BirthFormState> {
+  const hour = typeof b.hour === 'number' ? b.hour : 0;
+  const clockHour = hour === 0 ? '0' : String(hour * 2 - 1);
+  return {
+    name: b.name ?? '',
+    year: b.year ? String(b.year) : '',
+    month: b.month ? String(b.month) : '',
+    day: b.day ? String(b.day) : '',
+    clockHour,
+    clockMinute: '0',
+    unknownTime: false,
+    province: b.province ?? '',
+    city: b.city ?? '',
+    longitude: b.longitude ?? 120,
+    gender: b.gender === 'female' ? 'female' : 'male',
+  };
+}

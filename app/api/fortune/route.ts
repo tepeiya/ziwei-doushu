@@ -12,6 +12,8 @@ import { buildChartContext } from '@/lib/server/prompt';
 import { getClientIp, rateLimit } from '@/lib/server/ratelimit';
 import { pipeModeratedStream } from '@/lib/server/moderation';
 import type { ZiweiChart } from '@/lib/ziwei/types';
+import { resolveIdentity, checkQuota } from '@/lib/billing/quota';
+import { incTrial } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,6 +29,7 @@ const FORTUNE_SYSTEM = [
   '合规红线（必须遵守）：',
   '- 内容仅作传统命理文化「娱乐参考」，不构成任何人生、投资、医疗或法律决策建议。',
   '- 不夸大、不恐吓、不做绝对化断言；健康维度仅作传统养生泛谈，并明确建议以现代医学为准。',
+  '- 不要以任何形式自称 AI、助手或说明你的模型名称/版本；不要寒暄或自我介绍，直接开始解读。',
   '- 使用 Markdown（**【小标题】** 与 **加粗** 分层）。',
 ].join('\n');
 
@@ -36,6 +39,19 @@ export async function POST(req: NextRequest) {
   if (!rl.success) {
     return new Response('请求过于频繁，请稍后再试', { status: 429 });
   }
+
+  // 硬付费墙：与 AI 解读共用同一套试用额度（同一身份累计），超出返回 402
+  const { identity, setCookie } = await resolveIdentity(req);
+  const quota = await checkQuota(identity);
+  if (!quota.ok) {
+    const res = new Response(
+      JSON.stringify({ error: quota.reason, code: 'PAYMENT_REQUIRED' }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } },
+    );
+    if (setCookie) res.headers.set('Set-Cookie', setCookie);
+    return res;
+  }
+  await incTrial(identity.id);
 
   let body: { chart?: ZiweiChart; year?: number };
   try {
@@ -69,11 +85,12 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    },
-  });
+  const streamHeaders: Record<string, string> = {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  };
+  // 首次访问下发游客 cookie，保证后续请求复用同一身份，试用次数才能累计
+  if (setCookie) streamHeaders['Set-Cookie'] = setCookie;
+  return new Response(stream, { headers: streamHeaders });
 }

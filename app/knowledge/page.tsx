@@ -5,8 +5,10 @@
 
 import Link from 'next/link';
 import SiteNav from '@/components/SiteNav';
+import FamousPersonCard from '@/components/FamousPersonCard';
 import { ALL_STARS, ALL_TOPICS, getKnowledge, STAR_BRIEF_SEO, STAR_TO_SLUG } from '@/lib/seo/knowledge';
 import { TOPIC_LABEL } from '@/lib/ziwei/db-analysis';
+import { FAMOUS_PERSONS } from '@/lib/ziwei/famous';
 
 export const metadata = {
   title: '紫微斗数知识库 · 14 主星 × 13 宫位 · 传统正宗体系',
@@ -110,6 +112,22 @@ export default function KnowledgeHomePage() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* 名人命盘：公开文献出生日期构成的兴趣案例，点击深链到 /chart 自动排盘 */}
+        <div className="mt-14">
+          <div style={{ fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.3em', textAlign: 'center', marginBottom: '18px' }}>
+            名人命盘
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {FAMOUS_PERSONS.slice(0, 3).map(person => (
+              <FamousPersonCard
+                key={person.id}
+                person={person}
+                shareHref={`/chart?y=${person.year}&m=${person.month}&d=${person.day}&h=${person.hour === 0 ? 23 : person.hour * 2 - 1}&mi=0&g=${person.gender === 'male' ? 'm' : 'f'}&n=${encodeURIComponent(person.name)}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>

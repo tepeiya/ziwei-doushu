@@ -116,6 +116,15 @@ export function findBlockHits(text: string): string[] {
   return BLOCK_TERMS.filter((t) => text.includes(t));
 }
 
+// 兜底清洗：模型偶尔会在开头自报身份（如「我是 Sapiens AI 的 Agnes-3.0-flash」）。
+// 只作用于首个输出分块的开头，去除寒暄式自我介绍，不影响正文。
+const SELF_INTRO_RE =
+  /^(?:我(?:是|叫)[^\n。]{0,40}(?:AI|人工智能|助手|模型|Agnes|Sapiens|GPT|Claude|大模型|助手)[^\n。]{0,30}[。\n]?|您好[^\n。]*?(?:AI|助手)[^\n。]*?[。\n]?)/i;
+
+export function stripLeadingIntro(text: string): string {
+  return text.replace(SELF_INTRO_RE, '').replace(/^\s*\n+/, '');
+}
+
 /** 命中 warn 级词（绝对化 / 承诺式）。 */
 export function findWarnHits(text: string): string[] {
   const hits: string[] = [];
@@ -165,7 +174,9 @@ export async function pipeModeratedStream(
 
   try {
     for await (const raw of gen) {
-      const delta = enabled ? softFilter(raw) : raw;
+      let delta = enabled ? softFilter(raw) : raw;
+      // 仅对首个分块的开头做自我介绍兜底清洗
+      if (full.length === 0) delta = stripLeadingIntro(delta);
       if (enabled) {
         const hits = findBlockHits(delta);
         if (hits.length) {

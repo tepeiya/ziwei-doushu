@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { BirthInfo } from '@/lib/ziwei/types';
 import { SHICHEN } from '@/lib/ziwei/constants';
+import { birthInfoToForm } from '@/lib/ziwei/share';
 import { useTheme } from '@/components/ThemeProvider';
 import { PROVINCES } from '@/lib/ziwei/cities';
 
@@ -27,6 +28,14 @@ interface BirthFormProps {
   onFormSave?: (data: BirthFormState) => void;
   /** 隐藏内部「立即起盘」按钮（合盘等场景由父级统一触发） */
   hideSubmit?: boolean;
+  /**
+   * 自动带入来源（年运/流年等 hideSubmit 场景不用每次重填）：
+   * 1. localStorage `ziwei-birth-<key>`（上次填写，本浏览器记忆）
+   * 2. autoRestore 允许时再取登录用户「我的命盘」最近一次档案（/api/charts）
+   * 深链预填（initialData 有出生日期）时跳过，避免覆盖链接指定的日期。
+   */
+  storageKey?: string;
+  autoRestore?: boolean;
 }
 
 const SHICHEN_NAMES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
@@ -47,7 +56,33 @@ function isValidDate(y: number, m: number, d: number): boolean {
   return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
 }
 
-export default function BirthForm({ onSubmit, loading, initialData, onFormSave, hideSubmit }: BirthFormProps) {
+/**
+ * 纯函数版表单校验（与组件内 errors 定义保持一致）。
+ * 供 hideSubmit 场景（合盘/流年/年运）的父级在提交前复用，
+ * 避免父级只查字段非空、放过非法日期/越界年份。
+ */
+export function validateForm(form: BirthFormState | null): Record<string, string> {
+  if (!form) return { _: '请先填写出生信息' };
+  const y = parseInt(form.year) || 0;
+  const m = parseInt(form.month) || 0;
+  const d = parseInt(form.day) || 0;
+  const errors: Record<string, string> = {
+    year: !form.year ? '请选择出生年份'
+      : y < 1900 || y > 2026 ? '年份范围：1900–2026'
+      : '',
+    month: !form.month ? '请选择月份' : '',
+    day: !form.day ? '请选择日期'
+      : form.year && form.month && !isValidDate(y, m, d) ? `${m}月没有${d}日`
+      : '',
+  };
+  // 时辰：未知时辰时不校验，否则要求钟表时间两项都在
+  if (!form.unknownTime && (form.clockHour === '' || form.clockMinute === '')) {
+    errors.time = '请选择出生时间';
+  }
+  return errors;
+}
+
+export default function BirthForm({ onSubmit, loading, initialData, onFormSave, hideSubmit, storageKey = 'default', autoRestore = true }: BirthFormProps) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -67,12 +102,52 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  // 海外经度输入的原文本：允许输入框短暂为空/未输完整（如 "-", "139."），
+  // 只有能解析成合法数字时才更新 form.longitude，避免清空输入框瞬间经度跳变 0° 导致真太阳时全错
+  const [longRaw, setLongRaw] = useState<string>(String(initialData?.longitude ?? 120));
 
-  // 表单状态变化时实时同步给父级（合盘等场景下父级靠这个收集双方数据）
+  // 表单状态变化时实时同步给父级（合盘等场景下父级靠这个收集双方数据），
+  // 并持久化到 localStorage 作为「上次填写」记忆
   useEffect(() => {
     onFormSave?.({ ...form });
+    // 只保存已填过出生日期的表单，避免深链直排盘时空表单把「上次填写」记忆清掉
+    if (form.year && form.month && form.day) {
+      try {
+        localStorage.setItem(`ziwei-birth-${storageKey}`, JSON.stringify(form));
+      } catch { /* ignore */ }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
+
+  // ── 自动带入（挂载后执行，SSR 水合不受影响）────────────────
+  // 有 initialData 且带出生日期（深链）时不做任何恢复，防覆盖链接意图
+  const hasDeepLink = !!(initialData?.year && initialData.month && initialData.day);
+  useEffect(() => {
+    if (hasDeepLink) return;
+    let alive = true;
+    (async () => {
+      let restore: Partial<BirthFormState> | null = null;
+      // 1) 本浏览器上次填写
+      try {
+        const raw = localStorage.getItem(`ziwei-birth-${storageKey}`);
+        const memo = raw ? (JSON.parse(raw) as Partial<BirthFormState>) : null;
+        if (memo && memo.year && memo.month && memo.day) restore = memo;
+      } catch { /* ignore */ }
+      // 2) 登录用户的最近一次命盘档案
+      if (!restore && autoRestore) {
+        try {
+          const res = await fetch('/api/charts');
+          if (res.ok) {
+            const data = await res.json();
+            const b = data?.charts?.[0]?.birthInfo;
+            if (b) restore = birthInfoToForm(b);
+          }
+        } catch { /* 未登录/网络异常，静默 */ }
+      }
+      if (alive && restore) setForm(prev => ({ ...prev, ...restore }));
+    })();
+    return () => { alive = false; };
+  }, [storageKey, autoRestore]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cityList = useMemo(() => {
     const prov = PROVINCES.find(p => p.name === form.province);
@@ -130,7 +205,9 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
   const handleProvince = (prov: string) => {
     const provData = PROVINCES.find(p => p.name === prov);
     const firstCity = provData?.cities[0];
-    setForm({ ...form, province: prov, city: firstCity?.name || '', longitude: firstCity?.longitude ?? 120 });
+    const longitude = firstCity?.longitude ?? 120;
+    setForm({ ...form, province: prov, city: firstCity?.name || '', longitude });
+    setLongRaw(String(longitude));
   };
 
   const handleCity = (cityName: string) => {
@@ -315,12 +392,27 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
               min={-180}
               max={180}
               step={0.1}
-              value={form.longitude}
-              onChange={e => setForm({ ...form, longitude: parseFloat(e.target.value) || 0 })}
+              value={longRaw}
+              onChange={e => {
+                const raw = e.target.value;
+                setLongRaw(raw);
+                const parsed = parseFloat(raw);
+                // 仅在数值合法且在 [-180, 180] 范围内时同步到 form，越界不采纳
+                if (!Number.isNaN(parsed) && parsed >= -180 && parsed <= 180) {
+                  setForm({ ...form, longitude: parsed });
+                }
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = inputBorder;
+                // 失焦时若留有不完整文本（空串、"-" 等），回退到最后一个有效经度
+                const parsed = parseFloat(longRaw);
+                if (Number.isNaN(parsed) || parsed < -180 || parsed > 180) {
+                  setLongRaw(String(form.longitude));
+                }
+              }}
               placeholder="出生地经度（如 139.7 东京 / -77.0 纽约）"
               style={inputStyle}
               onFocus={e => { e.target.style.borderColor = focusBorder; }}
-              onBlur={e => { e.target.style.borderColor = inputBorder; }}
             />
           ) : (
             <select

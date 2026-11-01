@@ -11,6 +11,8 @@ interface ChartBoardProps {
   chart: ZiweiChart;
   onStarSelect?: (star: Star, palace: Palace) => void;
   onPalaceSelect?: (palace: Palace) => void;
+  /** 反选/取消宫位选中时回调（父级用于清空选中态） */
+  onPalaceDeselect?: () => void;
   onSiHuaClick?: (starName: string, siHua: string, view: TimeView) => void;
 }
 
@@ -53,7 +55,7 @@ function getSanFangSiZheng(branch: number): [number, number, number, number] {
 
 const ANIMATION_ORDER = [5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4];
 
-export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHuaClick }: ChartBoardProps) {
+export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onPalaceDeselect, onSiHuaClick }: ChartBoardProps) {
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
   const [timeView, setTimeView] = useState<TimeView>('mingpan');
   const [liunianYear, setLiunianYear] = useState<number>(new Date().getFullYear());
@@ -78,7 +80,10 @@ export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHu
   const handlePalaceClick = (branch: number) => {
     const isDeselecting = selectedBranch === branch;
     setSelectedBranch(prev => prev === branch ? null : branch);
-    if (!isDeselecting) {
+    if (isDeselecting) {
+      // 反选时通知父级清空选中宫位（InsightPanel 的分析横幅/上下文卡片残留）
+      onPalaceDeselect?.();
+    } else {
       const palace = palaceMap[branch];
       if (palace) onPalaceSelect?.(palace);
     }

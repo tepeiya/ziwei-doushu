@@ -41,6 +41,16 @@ const SiHuaBadge = ({
         onClick && 'cursor-pointer hover:opacity-100',
       )}
       onClick={onClick}
+      /* 可点击 badge 补键盘可达：可聚焦 + Enter/Space 触发 */
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick(e as unknown as React.MouseEvent);
+        }
+      } : undefined}
     >
       {overlay && label && <span className="mr-px opacity-70">{label}</span>}
       {siHua}
@@ -66,7 +76,20 @@ function StarLine({
 }) {
   const raw = star.brightnessRaw as StarBrightness | undefined;
   return (
-    <div className="flex items-center" onClick={e => { e.stopPropagation(); onStarClick?.(star); }}>
+    <div
+      className="flex items-center"
+      onClick={e => { e.stopPropagation(); onStarClick?.(star); }}
+      /* 星曜行可键盘操作（进入详情） */
+      role={onStarClick ? 'button' : undefined}
+      tabIndex={onStarClick ? 0 : undefined}
+      onKeyDown={onStarClick ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          onStarClick(star);
+        }
+      } : undefined}
+    >
       <span className={clsx('leading-tight font-bold tracking-tight cursor-pointer hover:brightness-125 transition-all', baseClass)}>
         {star.name}
       </span>
@@ -114,6 +137,15 @@ export default function PalaceCell({
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.35, delay, ease: 'easeOut' }}
       onClick={onClick}
+      /* 宫位格可键盘选中（InsightPanel 联动分析） */
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      } : undefined}
       className="relative flex flex-col p-1.5 cursor-pointer transition-all duration-200 h-full"
       style={{
         minHeight: '90px',

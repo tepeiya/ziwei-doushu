@@ -15,7 +15,6 @@ const WUXING_COLOR: Record<Wuxing, string> = {
 };
 
 /* ── 星曜亮度 9 档色阶（庙→地，由吉转凶）── */
-const BRIGHT_ORDER: StarBrightness[] = ['庙', '旺', '得', '利', '平', '不', '闲', '陷', '地'];
 const BRIGHT_COLOR: Record<StarBrightness, string> = {
   庙: '#15803d',
   旺: '#16a34a',

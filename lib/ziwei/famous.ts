@@ -1,9 +1,11 @@
 /**
  * 名人命盘数据库
  * 基于公开记录的出生日期，时辰为估算值（部分有文献记载）
+ *
+ * 注意：纯静态数据模块，不依赖任何服务端 API；
+ * FamousPersonCard（客户端组件）会引用其类型与字段直接渲染，
+ * 并据出生信息构造 /chart 分享深链，因此此模块须可在客户端侧使用。
  */
-
-import 'server-only';
 
 export interface FamousPerson {
   id: string;

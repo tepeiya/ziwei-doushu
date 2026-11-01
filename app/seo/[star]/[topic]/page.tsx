@@ -1,6 +1,6 @@
 import { ALL_STARS, STAR_TO_SLUG, SLUG_TO_STAR, ALL_TOPICS } from '@/lib/seo/knowledge';
 import { STAR_DB, TOPIC_LABEL, TOPIC_PALACE_NAME } from '@/lib/ziwei/db-analysis';
-import type { TopicKey } from '@/lib/ziwei/db-analysis';
+import type { TopicKey, StarContent } from '@/lib/ziwei/db-analysis';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import SiteNav from '@/components/SiteNav';
@@ -57,7 +57,7 @@ export default function SeoArticle({ params }: { params: { star: string; topic: 
   }
   const label = TOPIC_LABEL[topic];
   const palace = TOPIC_PALACE_NAME[topic];
-  const raw = (STAR_DB as Record<string, Record<string, string>>)?.[star]?.[TOPIC_FIELD[topic]];
+  const raw = STAR_DB[star]?.[TOPIC_FIELD[topic] as keyof StarContent];
   const m = parseMarkers(raw ?? '');
   const hasContent = !!(raw && raw.trim());
 

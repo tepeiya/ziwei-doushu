@@ -23,12 +23,45 @@ export default function PayPage() {
   const [done, setDone] = useState(false);
   const [err, setErr] = useState('');
 
+  // 订单轮询：verify 返回 404/错误体不能当订单对象（否则渲染出 ¥NaN）；
+  // 网关订单（微信扫码 / 支付宝回跳）需轮询到 paid 才自动跳转
   useEffect(() => {
-    fetch(`/api/pay/verify?id=${orderId}`)
-      .then((r) => r.json())
-      .then(setOrder)
-      .catch(() => setErr('订单加载失败'));
-  }, [orderId]);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+
+    async function poll() {
+      if (cancelled || attempts >= 200) return; // 上限约 10 分钟
+      attempts += 1;
+      try {
+        const res = await fetch(`/api/pay/verify?id=${orderId}`);
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (!res.ok || !data || data.error) {
+          if (res.status === 404) {
+            setErr('订单不存在或已被清理，请重新下单');
+            return;
+          }
+          throw new Error('verify failed');
+        }
+        setOrder(data);
+        setErr('');
+        if (data.status === 'paid') {
+          setDone(true);
+          setTimeout(() => router.push('/profile'), 1600);
+          return;
+        }
+        if (data.gateway) timer = setTimeout(poll, 3000); // 仅网关订单轮询
+      } catch {
+        if (!cancelled) timer = setTimeout(poll, 5000);
+      }
+    }
+    poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [orderId, router]);
 
   async function sandboxPay() {
     setBusy(true);
@@ -111,7 +144,7 @@ export default function PayPage() {
         {order ? (
           <>
             <div style={{ fontSize: '34px', fontWeight: 700, color: 'var(--ac)', marginBottom: '4px' }}>
-              {formatYuan(order.amount)}
+              {typeof order.amount === 'number' ? formatYuan(order.amount) : '—'}
             </div>
             <div style={{ fontSize: '12px', color: 'var(--tx-3)', marginBottom: '24px' }}>订单号 {orderId}</div>
           </>

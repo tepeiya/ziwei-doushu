@@ -4,6 +4,18 @@ export const STEMS = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '�
 // 地支 Earthly Branches
 export const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 
+/**
+ * 时辰支索引（0–11，0=子）格式化显示。
+ * 历史遗留数据可能误存真实小时数（如 23），此时一并归一到子时；
+ * 越界/缺失返回问号。供前端 birthText 等展示统一使用。
+ */
+export function formatShichen(hour?: number): string {
+  if (hour === undefined || hour === null || Number.isNaN(hour)) return '?时';
+  if (hour === 23) return '子时'; // 兼容误存真实小时 23 的旧数据
+  const name = BRANCHES[hour];
+  return name ? `${name}时` : '?时';
+}
+
 // 时辰对应地支
 export const SHICHEN = [
   { branch: 0, name: '子时', range: '23:00-01:00' },

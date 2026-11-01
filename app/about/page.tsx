@@ -1,5 +1,6 @@
 export const metadata = { title: '关于与署名 · 紫微命盘', description: '版权与开源署名声明' };
 
+import Link from 'next/link';
 import SiteNav from '@/components/SiteNav';
 
 export default function AboutPage() {
@@ -40,11 +41,11 @@ export default function AboutPage() {
 
         <h2 style={{ fontSize: 18, marginTop: 32, marginBottom: 12 }}>4. 相关链接</h2>
         <p>
-          <a href="/privacy" style={{ color: 'var(--ac)' }}>隐私政策</a>
+          <Link href="/privacy" style={{ color: 'var(--ac)' }}>隐私政策</Link>
           {' · '}
-          <a href="/terms" style={{ color: 'var(--ac)' }}>服务条款</a>
+          <Link href="/terms" style={{ color: 'var(--ac)' }}>服务条款</Link>
           {' · '}
-          <a href="/" style={{ color: 'var(--ac)' }}>返回首页</a>
+          <Link href="/" style={{ color: 'var(--ac)' }}>返回首页</Link>
         </p>
       </main>
     </div>

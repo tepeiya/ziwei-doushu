@@ -25,7 +25,12 @@ export default function PricingPage() {
         setErr(data.error || '下单失败，请重试');
         return;
       }
-      router.push(data.payUrl);
+      // 沙箱为站内路由（/pay/:id）；真实网关返回外部 https 地址，router.push 不支持外链
+      if (typeof data.payUrl === 'string' && data.payUrl.startsWith('http')) {
+        window.location.href = data.payUrl;
+      } else {
+        router.push(data.payUrl || '/');
+      }
     } catch {
       setBusy(null);
       setErr('网络异常，请重试');

@@ -2,7 +2,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { exportChartPdf } from '@/lib/exportPdf';
+import { exportChartPdf, buildV4Section } from '@/lib/exportPdf';
+import { readSseStream } from '@/lib/sse-client';
+import { formatShichen } from '@/lib/ziwei/constants';
 import type { ZiweiChart, Palace } from '@/lib/ziwei/types';
 import type { TimeView } from './TimeNav';
 
@@ -23,6 +25,18 @@ interface InsightPanelProps {
   selectedPalace?: Palace | null;
   selectedSiHua?: SelectedSiHua | null;
 }
+
+/** /api/usage 返回的会员 / 试用配额 */
+interface Quota {
+  isMember: boolean;
+  isGuest: boolean;
+  trialUsed: number;
+  trialLimit: number;
+  trialRemaining: number | null; // 会员为 null（无限）
+}
+
+// 服务端尚未返回配额时的展示兜底（与 TRIAL_USES 默认值一致）
+const DEFAULT_TRIAL = 3;
 
 const TOPICS = [
   { key: 'overview',     label: '命格' },
@@ -192,12 +206,18 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTopic, setActiveTopic] = useState<string>('overview');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState(false);
+  const [quota, setQuota] = useState<Quota | null>(null);
+  const [paywall, setPaywall] = useState(false);
   const messagesRef = useRef<Message[]>([]); // always-current copy for closures
   const loadingRef = useRef(false);
   const autoLoaded = useRef(false);
   const lastPalaceBranch = useRef<number | undefined>(undefined);
   const lastSiHuaKey = useRef<string | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // 流式响应进行中暂存的待发送 prompt（如宫位分析），响应结束后补发
+  const palacePromptQueue = useRef<string | undefined>(undefined);
 
   // Keep refs in sync
   useEffect(() => { messagesRef.current = messages; }, [messages]);
@@ -209,6 +229,37 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // 拉取配额（会员 / 试用剩余），登录态变化后刷新
+  // next-auth 默认 Session['user'] 不含 id，此处安全取值仅用于依赖比较
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  useEffect(() => {
+    fetch('/api/usage')
+      .then((r) => r.json())
+      .then((d) => setQuota(d))
+      .catch(() => {});
+  }, [userId]);
+
+  // 消费一次试用额度（成功发起解读后，本地乐观扣减，与服务端 incTrial 对齐）
+  const consumeQuota = () => {
+    setQuota((q) =>
+      q
+        ? {
+            ...q,
+            trialUsed: (q.trialUsed ?? 0) + 1,
+            trialRemaining: q.isMember ? null : Math.max(0, (q.trialRemaining ?? 0) - 1),
+          }
+        : q,
+    );
+  };
+
+  // 命中付费墙后从服务端重新拉取最新配额
+  const refreshQuota = () => {
+    fetch('/api/usage')
+      .then((r) => r.json())
+      .then((d) => setQuota(d))
+      .catch(() => {});
+  };
 
   // Auto-generate 命格总览 on mount
   useEffect(() => {
@@ -242,7 +293,11 @@ ${selectedPalace.name}在命盘中的意义，以及这种星曜配置的整体�
 **【实际建议】**
 基于此宫的具体建议。`;
 
-    sendMessage(prompt, true);
+    if (loadingRef.current) {
+      // 正在流式响应时暂存，等 finally 中恢复队列，避免「点了没反应」
+      palacePromptQueue.current = prompt;
+      return;
+    }    sendMessage(prompt, true);
   }, [selectedPalace]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 注入四化飞化分析
@@ -280,52 +335,95 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
   }, [selectedSiHua]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const streamResponse = async (apiMessages: { role: 'user' | 'assistant'; content: string }[]) => {
+    let gotResponse = false; // 是否已拿到响应头，用于区分「连不上」与「读流中断」
     try {
       const res = await fetch('/api/interpret', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chart, messages: apiMessages }),
       });
+      gotResponse = true;
       if (res.status === 404) throw new Error('api-missing');
-      if (!res.ok) throw new Error('请求失败');
+      if (res.status === 402) {
+        // 付费墙：服务端判定试用次数已用尽
+        refreshQuota();
+        setPaywall(true);
+        // 移除刚乐观插入的用户气泡，避免留下没有回应的提问
+        setMessages(prev =>
+          prev.length && prev[prev.length - 1].role === 'user' ? prev.slice(0, -1) : prev,
+        );
+        throw new Error('paywall');
+      }
+      if (!res.ok) {
+        // 透传服务端真实原因（如 429 限流、AI 供应商报错），
+        // 避免一律显示「解读失败」掩盖「请求过于频繁」等可自助解决的情况。
+        let msg = `解读失败（HTTP ${res.status}）`;
+        try {
+          const raw = await res.text();
+          try {
+            const j = JSON.parse(raw);
+            if (j && typeof j.error === 'string' && j.error) msg = j.error;
+          } catch {
+            // 部分限流直接返回纯文本（如「请求过于频繁，请稍后再试」）
+            const t = raw?.trim();
+            if (t && t.length > 0 && t.length < 120) msg = t;
+          }
+        } catch { /* 读取失败则用默认文案 */ }
+        throw new Error(msg);
+      }
       if (!res.body) throw new Error('无响应流');
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
+      // 切勿在 readSseStream 之前调用 res.body.getReader()：
+      // 那会锁住流，readSseStream 内部再次 getReader() 会抛
+      // "TypeError: ReadableStream is locked"，表现为解读失败/网络错误。
       let assistantText = '';
 
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') break;
-          try {
-            const delta = JSON.parse(data).delta?.text ?? '';
-            assistantText += delta;
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = { role: 'assistant', content: assistantText };
-              return updated;
-            });
-          } catch { /* skip */ }
-        }
-      }
+      await readSseStream(res.body, (data) => {
+        if (data === '[DONE]') return;
+        try {
+          const delta = JSON.parse(data).delta?.text ?? '';
+          assistantText += delta;
+          setMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: 'assistant', content: assistantText };
+            return updated;
+          });
+        } catch { /* skip */ }
+      });
     } catch (e) {
+      // 付费墙已弹窗处理，不追加失败气泡
+      if (e instanceof Error && e.message === 'paywall') return;
       const missing = e instanceof Error && e.message === 'api-missing';
-      setMessages(prev => [...prev, { role: 'assistant', content: missing ? 'AI 解读服务暂未配置（/api/interpret），排盘与命盘展示不受影响。' : '解读失败，请稍后重试。' }]);
+      let content: string;
+      if (missing) {
+        content = 'AI 解读服务暂未配置（/api/interpret），排盘与命盘展示不受影响。';
+      } else if (!gotResponse) {
+        // fetch 本身就失败了：断网 / 服务未启动 / 请求被拦截
+        content = '网络连接失败，请检查网络后重试。';
+      } else {
+        // 展示服务端透传的真实原因（如「请求过于频繁，请稍后再试」）
+        content = `解读失败：${(e as Error)?.message || '请稍后重试'}`;
+      }
+      setMessages(prev => [...prev, { role: 'assistant', content }]);
     } finally {
       setLoading(false);
       loadingRef.current = false;
+      // 补发流式期间被暂存的分析请求（如连点宫位）
+      const pending = palacePromptQueue.current;
+      palacePromptQueue.current = undefined;
+      if (pending) setTimeout(() => sendMessage(pending, true), 0);
     }
   };
 
   const sendMessage = (text: string, hidden = false) => {
     if (!text.trim() || loadingRef.current) return;
+    // 硬付费墙：非会员且试用次数用尽 → 弹窗，不再发起请求
+    if (quota && !quota.isMember && (quota.trialRemaining ?? 0) <= 0) {
+      setPaywall(true);
+      return;
+    }
     loadingRef.current = true;
     setLoading(true);
 
@@ -338,6 +436,7 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
 
     setMessages(prev => [...prev, userMsg]);
     setInput('');
+    consumeQuota();
     streamResponse(apiMessages);
   };
 
@@ -351,28 +450,56 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
     sendMessage(input);
   };
 
-  const exportPdf = () => {
-    const text = messages.filter((m) => m.role === 'assistant').map((m) => m.content).join('\n\n');
-    const b = chart.birthInfo;
-    const birth = b ? `${b.year}年${b.month}月${b.day}日` : '';
-    exportChartPdf({ name: '命主', birth, text });
+  const exportPdf = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const aiText = messages.filter((m) => m.role === 'assistant').map((m) => m.content).join('\n\n');
+      const b = chart.birthInfo;
+      const birth = b ? `${b.year}年${b.month}月${b.day}日 ${formatShichen(b.hour)}` : '';
+      // 一并拉取 v4.0 数据集的 13 维原生解读，拼在 AI 解读之后
+      let text = aiText;
+      if (b) {
+        const v4 = await buildV4Section(b);
+        if (v4) text = `${aiText}\n\n${v4}`;
+      }
+      await exportChartPdf({ name: b?.name || '', birth, text, chart });
+    } catch (e) {
+      console.error('exportChartPdf failed', e);
+      setPdfError(true);
+      setTimeout(() => setPdfError(false), 2500);
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   return (
-    <div className="flex flex-col h-full rounded-xl overflow-hidden card-glass">
+    <>
+      <div className="flex flex-col h-full rounded-xl overflow-hidden card-glass">
 
-      {/* ── 会员引导 ── */}
-      {session?.user ? (
-        <div className="flex-shrink-0 px-3 py-2 text-[10px]" style={{ background: 'rgba(212,168,67,0.06)', borderBottom: '1px solid var(--t-border)', color: 'var(--t-gold)' }}>
-          <span>已登录 · </span>
-          <a href="/pricing" style={{ textDecoration: 'underline' }}>开通会员解锁合盘 / 流年 / 命书 PDF</a>
-        </div>
-      ) : (
-        <div className="flex-shrink-0 px-3 py-2 flex items-center justify-between" style={{ background: 'rgba(212,168,67,0.08)', borderBottom: '1px solid var(--t-border)' }}>
-          <span className="text-[10px]" style={{ color: 'var(--t-gold)' }}>登录 / 开通会员，解锁合盘、流年与命书 PDF</span>
-          <a href="/login" className="text-[10px] px-2 py-1 rounded-lg" style={{ border: '1px solid rgba(212,168,67,0.3)', color: 'var(--t-gold)' }}>登录</a>
-        </div>
-      )}
+      {/* ── 会员 / 试用引导 ── */}
+      <div
+        className="flex-shrink-0 px-3 py-2 text-[10px] flex items-center justify-between gap-2"
+        style={{
+          background: !quota?.isMember && (quota?.trialRemaining ?? DEFAULT_TRIAL) <= 0 ? 'rgba(220,38,38,0.08)' : 'rgba(212,168,67,0.06)',
+          borderBottom: '1px solid var(--t-border)',
+          color: !quota?.isMember && (quota?.trialRemaining ?? DEFAULT_TRIAL) <= 0 ? '#dc2626' : 'var(--t-gold)',
+        }}
+      >
+        {quota?.isMember ? (
+          <span>会员专享 · 无限次 AI 解读 · <a href="/pricing" style={{ textDecoration: 'underline' }}>管理 / 续费</a></span>
+        ) : session?.user ? (
+          <span>
+            免费试用剩余 <b>{quota ? quota.trialRemaining : DEFAULT_TRIAL}</b> / {quota?.trialLimit ?? DEFAULT_TRIAL} 次 ·{' '}
+            <a href="/pricing" style={{ textDecoration: 'underline' }}>开通会员无限解读</a>
+          </span>
+        ) : (
+          <span>游客可免费试用 {quota?.trialLimit ?? DEFAULT_TRIAL} 次 · 登录 / 开通会员解锁无限解读</span>
+        )}
+        {!session?.user && (
+          <a href="/login" className="text-[10px] px-2 py-1 rounded-lg flex-shrink-0" style={{ border: '1px solid rgba(212,168,67,0.3)', color: 'var(--t-gold)' }}>登录</a>
+        )}
+      </div>
 
       {/* ── Topic buttons ── */}
       <div className="flex-shrink-0 px-2 pt-2.5 pb-2" style={{ borderBottom: '1px solid var(--t-border)' }}>
@@ -481,10 +608,11 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
       <div className="flex-shrink-0 px-3 pb-3 pt-2" style={{ borderTop: '1px solid var(--t-border)' }}>
         <button
           onClick={exportPdf}
+          disabled={exportingPdf}
           className="w-full mb-2 text-[10px] py-1.5 rounded-lg transition-all"
-          style={{ border: '1px solid var(--t-border)', color: 'var(--t-faint)' }}
+          style={{ border: '1px solid var(--t-border)', color: 'var(--t-faint)', opacity: exportingPdf ? 0.6 : 1, cursor: exportingPdf ? 'wait' : 'pointer' }}
         >
-          导出命书 PDF
+          {exportingPdf ? 'PDF 生成中…' : pdfError ? '生成失败，请重试' : '导出命书 PDF'}
         </button>
         <div className="flex gap-2">
           <input
@@ -515,7 +643,43 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
           </button>
         </div>
       </div>
+      </div>
 
-    </div>
+      {/* ── 付费墙弹窗（fixed 覆盖视口，独立于面板 overflow，避免被裁切）── */}
+      <AnimatePresence>
+        {paywall && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(8,6,4,0.6)', backdropFilter: 'blur(2px)' }}
+            onClick={() => setPaywall(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              className="w-full max-w-[380px] rounded-2xl p-6 text-center"
+              style={{ background: 'var(--t-card)', border: '1px solid rgba(212,168,67,0.35)', boxShadow: '0 20px 60px rgba(0,0,0,0.45)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-3xl mb-3" style={{ color: 'var(--t-gold)' }}>🔒</div>
+              <h3 className="text-base font-semibold mb-2" style={{ color: 'var(--t-text)' }}>免费试用已用完</h3>
+              <p className="text-[12px] leading-relaxed mb-5" style={{ color: 'var(--t-text2)' }}>
+                您已用完 {quota?.trialLimit ?? DEFAULT_TRIAL} 次免费 AI 解读。开通会员即可无限次深度解读、合盘、流年与命书导出。
+              </p>
+              <div className="flex flex-col gap-2">
+                <a href="/pricing" onClick={() => setPaywall(false)} className="block w-full py-2.5 rounded-lg text-[13px] font-semibold" style={{ background: 'linear-gradient(135deg,#9a6210,#c88020)', color: '#fff8e8' }}>开通会员</a>
+                {!session?.user && (
+                  <a href="/login" onClick={() => setPaywall(false)} className="block w-full py-2.5 rounded-lg text-[13px] font-medium" style={{ border: '1px solid var(--t-border)', color: 'var(--t-text2)' }}>登录账号</a>
+                )}
+                <button onClick={() => setPaywall(false)} className="w-full py-2 text-[12px]" style={{ color: 'var(--t-faint)' }}>稍后再说</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

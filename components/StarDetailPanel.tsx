@@ -1,4 +1,5 @@
 'use client';
+import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Star } from '@/lib/ziwei/types';
 import { STAR_DESCRIPTIONS } from '@/lib/ziwei/constants';
@@ -181,10 +182,22 @@ export default function StarDetailPanel({ star, palaceName, onClose }: StarDetai
   const detail = star ? STAR_DETAIL[star.name] : null;
   const typeConfig = star ? levelConfig[star.type] : null;
 
+  // 打开时按 Esc 关闭
+  useEffect(() => {
+    if (!star) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [star, onClose]);
+
   return (
     <AnimatePresence>
       {star && (
         <motion.div
+          role="dialog"
+          aria-label={`${star.name} 详情`}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 20 }}

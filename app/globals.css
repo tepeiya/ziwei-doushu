@@ -136,6 +136,21 @@ body {
   .with-tabbar { padding-bottom: 0; }
 }
 
+/* 主题切换过渡：由 ThemeProvider 在切换瞬间临时挂上，420ms 后移除 */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease !important;
+}
+
+/* 免责横幅（fixed bottom, z-200）：移动端要抬到底部 Tab 栏（z-50, fixed bottom）之上，
+   否则会盖住导航，用户无法触达底部 Tab */
+.disclaimer-banner { bottom: 0; }
+@media (max-width: 767.98px) {
+  .disclaimer-banner { bottom: calc(70px + env(safe-area-inset-bottom)); }
+}
+
 /* 无障碍：键盘焦点可见 + 跳转链接 */
 :focus-visible {
   outline: 2px solid var(--ac);

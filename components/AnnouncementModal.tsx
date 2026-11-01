@@ -31,6 +31,16 @@ export default function AnnouncementModal() {
     }
   }, [open]);
 
+  // Esc 关闭 + 对话框语义
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
   const close = () => {
     setOpen(false);
     try { localStorage.setItem(STORAGE_KEY, '1'); } catch { /* skip */ }
@@ -57,6 +67,9 @@ export default function AnnouncementModal() {
           }}
         >
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="announcement-title"
             initial={{ scale: 0.92, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0 }}
@@ -87,7 +100,7 @@ export default function AnnouncementModal() {
               <div style={{ fontSize: '10px', letterSpacing: '0.4em', color: '#b8922a', opacity: 0.7, marginBottom: '6px' }}>
                 A LETTER TO USERS
               </div>
-              <h2 style={{ fontSize: '19px', fontWeight: 700, color: '#3d2f10', letterSpacing: '0.08em', margin: 0 }}>
+              <h2 id="announcement-title" style={{ fontSize: '19px', fontWeight: 700, color: '#3d2f10', letterSpacing: '0.08em', margin: 0 }}>
                 致正在使用这个平台的你
               </h2>
               <button

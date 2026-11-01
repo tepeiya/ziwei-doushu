@@ -1,10 +1,10 @@
 'use client';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { motion, useScroll, useTransform, useInView, AnimatePresence } from 'framer-motion';
 import StarField from '@/components/StarField';
 import { useTheme, type Theme } from '@/components/ThemeProvider';
-import AnnouncementModal from '@/components/AnnouncementModal';
 import SiteNav from '@/components/SiteNav';
 
 // ─── 滚动入场 wrapper ────────────────────────────────────
@@ -241,7 +241,7 @@ function useColors(theme: Theme) {
     ctaBg:        d ? 'linear-gradient(135deg,#b8892a,#f0d070,#b8892a)'
                     : 'linear-gradient(135deg,#6a4206,#9a6810,#6a4206)',
     ctaText:      d ? '#08080a'                               : '#f8f3e8',
-    footerText:   d ? 'rgba(255,255,255,0.08)'                : '#d0b878',
+    footerText:   d ? 'rgba(255,255,255,0.45)'                : '#d0b878',
     scrollLine:   d ? 'rgba(212,168,67,0.3)'                  : 'rgba(140,100,20,0.3)',
     scrollText:   d ? 'rgba(255,255,255,0.12)'                : '#c0a870',
     altSection:   d ? 'rgba(255,255,255,0.02)'                : 'rgba(255,255,255,0.4)',
@@ -275,6 +275,80 @@ const STAR_BRIEF: Record<string, { attr: string; brief: string }> = {
   '破军': { attr: '水·耗星', brief: '耗星，主变动与开拓。勇于突破，不惧改变，一生变动大但有魄力，适合开拓型工作，走别人没走过的路。' },
 };
 
+// ─── 主星/四化点选视觉（index===1 抽为独立组件：
+//      此前 useState 写在 FeatureVisual 的条件分支里，违反 Rules of Hooks，
+//      一旦分支结构变化即崩溃；且每个分支结构不同也无法合并） ─────────
+function StarTapVisual({ colors: c }: { colors: ReturnType<typeof useColors> }) {
+  const [sel, setSel] = useState<string | null>(null);
+  const selInfo = sel ? (STAR_BRIEF[sel] ?? SIHUA_BRIEF[sel] ?? null) : null;
+  return (
+    <div className="flex flex-col gap-4 h-full justify-center">
+      {[
+        { group: '紫微系', stars: ['紫微', '天机', '太阳', '武曲', '天同', '廉贞'] },
+        { group: '天府系', stars: ['天府', '太阴', '贪狼', '巨门', '天相', '天梁', '七杀', '破军'] },
+      ].map(group => (
+        <div key={group.group}>
+          <div className="text-[11px] tracking-widest mb-2 transition-colors duration-300"
+            style={{ color: c.textFaint }}>{group.group}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {group.stars.map(s => (
+              <motion.button key={s}
+                onClick={() => setSel(sel === s ? null : s)}
+                whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}
+                transition={{ duration: 0.1 }}
+                className="text-xs px-2 py-1 rounded-md cursor-pointer"
+                style={{
+                  border: `1px solid ${sel === s ? c.goldSolid : c.goldLine}`,
+                  color: c.goldSolid,
+                  background: sel === s ? `${c.goldLine}30` : 'transparent',
+                  fontWeight: sel === s ? 600 : 400,
+                }}>
+                {s}
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div>
+        <div className="text-[11px] tracking-widest mb-2 transition-colors duration-300"
+          style={{ color: c.textFaint }}>四化飞星</div>
+        <div className="flex gap-2 flex-wrap">
+          {[['化禄', 'rgba(52,211,153,0.7)'], ['化权', 'rgba(96,165,250,0.7)'], ['化科', 'rgba(250,204,21,0.7)'], ['化忌', 'rgba(248,113,113,0.7)']].map(([label, color]) => (
+            <motion.button key={label}
+              onClick={() => setSel(sel === (label as string) ? null : (label as string))}
+              whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}
+              transition={{ duration: 0.1 }}
+              className="text-xs px-2.5 py-1 rounded-md cursor-pointer"
+              style={{
+                border: `1px solid ${color}`,
+                color,
+                background: sel === label ? `${(color as string).replace('0.7', '0.15')}` : 'transparent',
+                fontWeight: sel === label ? 600 : 400,
+              }}>
+              {label}
+            </motion.button>
+          ))}
+        </div>
+      </div>
+      <AnimatePresence mode="wait">
+        {selInfo && (
+          <motion.div key={sel}
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="rounded-xl p-4 mt-1.5"
+            style={{ border: `1px solid ${c.goldLine}`, background: c.featureBg }}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-sm font-semibold" style={{ color: c.goldSolid }}>{sel}</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ color: c.tagText, border: `1px solid ${c.goldLine}` }}>{selInfo.attr}</span>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: c.textSecond }}>{selInfo.brief}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── 功能视觉装饰 ────────────────────────────────────────
 function FeatureVisual({ index, colors: c }: { index: number; colors: ReturnType<typeof useColors> }) {
   if (index === 0) {
@@ -307,74 +381,7 @@ function FeatureVisual({ index, colors: c }: { index: number; colors: ReturnType
   }
 
   if (index === 1) {
-    const [sel, setSel] = useState<string | null>(null);
-    const selInfo = sel ? (STAR_BRIEF[sel] ?? SIHUA_BRIEF[sel] ?? null) : null;
-    return (
-      <div className="flex flex-col gap-4 h-full justify-center">
-        {[
-          { group: '紫微系', stars: ['紫微', '天机', '太阳', '武曲', '天同', '廉贞'] },
-          { group: '天府系', stars: ['天府', '太阴', '贪狼', '巨门', '天相', '天梁', '七杀', '破军'] },
-        ].map(group => (
-          <div key={group.group}>
-            <div className="text-[11px] tracking-widest mb-2 transition-colors duration-300"
-              style={{ color: c.textFaint }}>{group.group}</div>
-            <div className="flex flex-wrap gap-1.5">
-              {group.stars.map(s => (
-                <motion.button key={s}
-                  onClick={() => setSel(sel === s ? null : s)}
-                  whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}
-                  transition={{ duration: 0.1 }}
-                  className="text-xs px-2 py-1 rounded-md cursor-pointer"
-                  style={{
-                    border: `1px solid ${sel === s ? c.goldSolid : c.goldLine}`,
-                    color: c.goldSolid,
-                    background: sel === s ? `${c.goldLine}30` : 'transparent',
-                    fontWeight: sel === s ? 600 : 400,
-                  }}>
-                  {s}
-                </motion.button>
-              ))}
-            </div>
-          </div>
-        ))}
-        <div>
-          <div className="text-[11px] tracking-widest mb-2 transition-colors duration-300"
-            style={{ color: c.textFaint }}>四化飞星</div>
-          <div className="flex gap-2 flex-wrap">
-            {[['化禄', 'rgba(52,211,153,0.7)'], ['化权', 'rgba(96,165,250,0.7)'], ['化科', 'rgba(250,204,21,0.7)'], ['化忌', 'rgba(248,113,113,0.7)']].map(([label, color]) => (
-              <motion.button key={label}
-                onClick={() => setSel(sel === label ? null : label)}
-                whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}
-                transition={{ duration: 0.1 }}
-                className="text-xs px-2.5 py-1 rounded-md cursor-pointer"
-                style={{
-                  border: `1px solid ${color}`,
-                  color,
-                  background: sel === label ? `${color.replace('0.7', '0.15')}` : 'transparent',
-                  fontWeight: sel === label ? 600 : 400,
-                }}>
-                {label}
-              </motion.button>
-            ))}
-          </div>
-        </div>
-        <AnimatePresence mode="wait">
-          {selInfo && (
-            <motion.div key={sel}
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="rounded-xl p-4 mt-1.5"
-              style={{ border: `1px solid ${c.goldLine}`, background: c.featureBg }}>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-sm font-semibold" style={{ color: c.goldSolid }}>{sel}</span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ color: c.tagText, border: `1px solid ${c.goldLine}` }}>{selInfo.attr}</span>
-              </div>
-              <p className="text-xs leading-relaxed" style={{ color: c.textSecond }}>{selInfo.brief}</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    );
+    return <StarTapVisual colors={c} />;
   }
 
   if (index === 2) {
@@ -465,8 +472,6 @@ export default function HomePage() {
 
   return (
     <div style={{ background: c.bgBase, transition: 'background 0.35s ease' }} className="overflow-x-hidden with-tabbar">
-      {/* 致用户公告——首次访问全屏覆盖，关闭后才进入首页 */}
-      <AnnouncementModal />
       <SiteNav header={false} />
 
       <StarField />
@@ -583,68 +588,6 @@ export default function HomePage() {
               </motion.div>
             ))}
           </motion.div>
-        </motion.div>
-
-        {/* 上线公告便利贴 — 桌面端绝对定位右侧 */}
-        <motion.div
-          initial={{ opacity: 0, x: 30, rotate: 0 }}
-          animate={{ opacity: 1, x: 0, rotate: -4 }}
-          transition={{ delay: 1.4, duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
-          className="absolute hidden lg:block pointer-events-none"
-          style={{
-            right: 'clamp(2%, 6vw, 8%)',
-            top: '54%',
-            maxWidth: '240px',
-          }}
-        >
-          <div style={{
-            background: 'linear-gradient(135deg, #fff5e3 0%, #ffe1c0 100%)',
-            border: '2px dashed rgba(232,132,62,0.45)',
-            borderRadius: '16px',
-            padding: '14px 18px',
-            boxShadow: '0 8px 24px rgba(196,90,45,0.18), 0 2px 6px rgba(196,90,45,0.1)',
-            fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
-          }}>
-            <div style={{ fontSize: '20px', marginBottom: '6px', lineHeight: 1 }}>🎁</div>
-            <div style={{ fontSize: '13px', lineHeight: 1.7, color: '#8b3a1a', fontWeight: 500 }}>
-              <span style={{ color: '#c45a2d', fontWeight: 700, fontSize: '14px' }}>5/1 — 5/8</span>
-              <span> 限时回馈</span>
-            </div>
-            <div style={{ fontSize: '13px', lineHeight: 1.7, color: '#8b3a1a', fontWeight: 500 }}>
-              全部功能 + AI 提问
-              <strong style={{ color: '#c45a2d' }}> 全免费</strong>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* 上线公告便利贴 — 手机端正常流式显示（hero 内容下方居中） */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0, rotate: -2 }}
-          transition={{ delay: 1.4, duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
-          className="lg:hidden mx-auto mt-8 mb-2 pointer-events-none"
-          style={{
-            maxWidth: 'min(280px, 84vw)',
-          }}
-        >
-          <div style={{
-            background: 'linear-gradient(135deg, #fff5e3 0%, #ffe1c0 100%)',
-            border: '2px dashed rgba(232,132,62,0.45)',
-            borderRadius: '14px',
-            padding: '12px 16px',
-            boxShadow: '0 6px 18px rgba(196,90,45,0.16), 0 2px 4px rgba(196,90,45,0.08)',
-            fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
-            textAlign: 'center',
-          }}>
-            <div style={{ fontSize: '18px', marginBottom: '4px', lineHeight: 1 }}>🎁</div>
-            <div style={{ fontSize: '12px', lineHeight: 1.7, color: '#8b3a1a', fontWeight: 500 }}>
-              <span style={{ color: '#c45a2d', fontWeight: 700, fontSize: '13px' }}>5/1 — 5/8</span>
-              <span> 限时回馈</span>
-            </div>
-            <div style={{ fontSize: '12px', lineHeight: 1.7, color: '#8b3a1a', fontWeight: 500 }}>
-              全部功能 + AI <strong style={{ color: '#c45a2d' }}>全免费</strong>
-            </div>
-          </div>
         </motion.div>
 
         {/* 滚动提示（绝对定位，不影响 hero opacity 计算） */}
@@ -1103,9 +1046,8 @@ export default function HomePage() {
             免费起盘
           </motion.button>
           <div className="mt-4 flex flex-wrap gap-3 justify-center">
-            <motion.a
+            <Link
               href="/knowledge"
-              whileHover={{ scale: 1.02 }}
               className="text-xs tracking-[0.2em] inline-flex items-center gap-2 px-4 py-2 rounded-full"
               style={{
                 color: c.goldSolid,
@@ -1114,10 +1056,9 @@ export default function HomePage() {
                 textDecoration: 'none',
               }}>
               ✦ 紫微斗数知识库 →
-            </motion.a>
-            <motion.a
+            </Link>
+            <Link
               href="/library"
-              whileHover={{ scale: 1.02 }}
               className="text-xs tracking-[0.2em] inline-flex items-center gap-2 px-4 py-2 rounded-full"
               style={{
                 color: c.goldSolid,
@@ -1126,7 +1067,7 @@ export default function HomePage() {
                 textDecoration: 'none',
               }}>
               📜 古籍原典库 →
-            </motion.a>
+            </Link>
           </div>
         </FadeIn>
       </section>
@@ -1144,20 +1085,15 @@ export default function HomePage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             {SECTIONS.map(s => {
               const ready = s.status === 'ready';
-              return (
-                <a
-                  key={s.key}
-                  href={ready ? '/chart' : undefined}
-                  onClick={ready ? undefined : (e) => e.preventDefault()}
-                  className="rounded-lg px-3 py-3 text-center transition-all"
-                  style={{
-                    background: ready ? c.starBg : 'transparent',
-                    border: `1px ${ready ? 'solid' : 'dashed'} ${ready ? c.goldLine : c.navBorder}`,
-                    cursor: ready ? 'pointer' : 'not-allowed',
-                    opacity: ready ? 1 : 0.5,
-                    textDecoration: 'none',
-                  }}
-                >
+              const cardStyle: React.CSSProperties = {
+                background: ready ? c.starBg : 'transparent',
+                border: `1px ${ready ? 'solid' : 'dashed'} ${ready ? c.goldLine : c.navBorder}`,
+                cursor: ready ? 'pointer' : 'not-allowed',
+                opacity: ready ? 1 : 0.5,
+                textDecoration: 'none',
+              };
+              const inner = (
+                <>
                   <div className="text-base font-semibold mb-0.5 tracking-[0.1em]"
                     style={{ color: ready ? c.goldSolid : c.textMuted }}>
                     {s.name}
@@ -1166,7 +1102,17 @@ export default function HomePage() {
                     style={{ color: ready ? '#10b981' : c.textMuted }}>
                     {ready ? '✓ 已上线' : `规划中 · ${s.when}`}
                   </div>
-                </a>
+                </>
+              );
+              // 已上线用 next/link 站内跳转（不再整页刷新）；未上线只是占位，不该渲染成可点链接
+              return ready ? (
+                <Link key={s.key} href="/chart" className="rounded-lg px-3 py-3 text-center transition-all" style={cardStyle}>
+                  {inner}
+                </Link>
+              ) : (
+                <div key={s.key} className="rounded-lg px-3 py-3 text-center" style={cardStyle} aria-disabled>
+                  {inner}
+                </div>
               );
             })}
           </div>
@@ -1182,9 +1128,9 @@ export default function HomePage() {
             不构成任何医疗、投资、法律或重大决策建议。
           </p>
           <p className="text-[10px] tracking-wider" style={{ color: c.footerText }}>
-            <a href="/terms" style={{ color: c.footerText, textDecoration: 'underline' }}>服务条款</a>
+            <Link href="/terms" style={{ color: c.footerText, textDecoration: 'underline' }}>服务条款</Link>
             {' · '}
-            <a href="/privacy" style={{ color: c.footerText, textDecoration: 'underline' }}>隐私政策</a>
+            <Link href="/privacy" style={{ color: c.footerText, textDecoration: 'underline' }}>隐私政策</Link>
           </p>
         </div>
       </footer>

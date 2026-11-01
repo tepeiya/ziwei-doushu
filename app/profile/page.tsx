@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { listCharts, getMembership, isMember } from '@/lib/db';
+import { getAdmin } from '@/lib/admin';
 import Link from 'next/link';
 import ChartHistory, { type ChartItem } from '@/components/ChartHistory';
 import SiteNav from '@/components/SiteNav';
@@ -29,6 +30,7 @@ export default async function ProfilePage() {
 
   const charts = await listCharts(uid);
   const member = await isMember(uid);
+  const isAdmin = !!(await getAdmin());
   const m = await getMembership(uid);
   const nickname = session?.user?.name || '命主';
   const planName = m.plan === 'yearly' ? '年卡会员' : m.plan === 'monthly' ? '月卡会员' : '免费用户';
@@ -62,6 +64,44 @@ export default async function ProfilePage() {
             }}>开通会员</Link>
           )}
         </div>
+
+        {isAdmin && (
+          <div
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid rgba(212,168,67,0.35)',
+              borderRadius: 16,
+              padding: 24,
+              marginBottom: 28,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 16,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--tx-3)', letterSpacing: '0.2em', marginBottom: 6 }}>
+                管理员
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--tx-0)' }}>你拥有系统管理权限</div>
+            </div>
+            <Link
+              href="/admin"
+              style={{
+                padding: '10px 24px',
+                borderRadius: 'var(--r-pill)',
+                background: 'linear-gradient(135deg, #9a6210, #c88020)',
+                color: '#fff8e8',
+                fontSize: 13,
+                fontWeight: 600,
+                textDecoration: 'none',
+              }}
+            >
+              进入系统管理
+            </Link>
+          </div>
+        )}
 
         {/* 命盘历史 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>

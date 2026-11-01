@@ -4,7 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { createOrder } from '@/lib/db';
 import { getPlan } from '@/lib/billing';
 import { cacheSet } from '@/lib/server/cache';
-import { createPayment, getConfiguredChannel } from '@/lib/server/payments';
+import { createPayment } from '@/lib/server/payments';
+import { getPaymentConfig, resolveChannel } from '@/lib/payment-config';
 
 export const runtime = 'nodejs';
 
@@ -22,9 +23,11 @@ export async function POST(req: NextRequest) {
   const plan = getPlan(planId);
   if (!plan) return NextResponse.json({ error: '套餐不存在' }, { status: 404 });
 
-  const channel = getConfiguredChannel();
+  // 支付渠道：后台设置优先，其次环境变量；两者都未配齐 → 沙箱
+  const cfg = await getPaymentConfig();
+  const channel = resolveChannel(cfg);
 
-  // 未配置真实商户号 → 沙箱模拟支付
+  // 未配置真实商户号 / 后台强制沙箱 → 沙箱模拟支付
   if (!channel) {
     const order = await createOrder({ userId: uid, plan: plan.id, amount: plan.priceFen, channel: 'sandbox' });
     return NextResponse.json({
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
     clientIp: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
     returnUrl,
     notifyUrl,
-  });
+  }, cfg);
 
   if (!result) {
     return NextResponse.json({ error: '支付网关下单失败，请稍后重试' }, { status: 502 });

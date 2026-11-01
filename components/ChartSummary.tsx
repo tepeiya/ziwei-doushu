@@ -281,8 +281,9 @@ export default function ChartSummary({ chart }: ChartSummaryProps) {
           <span className="text-purple-500/60">◎</span>
           大限运程
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {chart.daXians.slice(0, 9).map((dx, i) => {
+        {/* 12 个大限全部显示（grid-cols-3 → 4 行）：slice(0,9) 会让 90+ 岁用户的当前大限无法高亮 */}
+        <div className="grid grid-cols-4 gap-2">
+          {chart.daXians.map((dx, i) => {
             const isCurrent = i === chart.currentDaXianIndex;
             return (
               <div

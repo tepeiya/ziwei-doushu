@@ -1,12 +1,13 @@
 'use client';
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import BirthForm, { type BirthFormState } from '@/components/BirthForm';
+import BirthForm, { validateForm, type BirthFormState } from '@/components/BirthForm';
 import { formToBirthInfo } from '@/lib/ziwei/share';
 import { generateChart as buildChart } from '@/lib/ziwei/algorithm';
 import type { BirthInfo, ZiweiChart } from '@/lib/ziwei/types';
 import { useTheme } from '@/components/ThemeProvider';
 import SiteNav from '@/components/SiteNav';
+import { readSseStream } from '@/lib/sse-client';
 
 function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
   const lines = text.split('\n');
@@ -44,45 +45,51 @@ export default function FortunePage() {
   const [analysis, setAnalysis] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [err, setErr] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
   const [apiMissing, setApiMissing] = useState(false);
   const analysisRef = useRef<HTMLDivElement>(null);
 
-  const isFormReady = (f: BirthFormState | null): boolean =>
-    !!(f && f.year && f.month && f.day && f.gender && (f.unknownTime || (f.clockHour !== '' && f.clockMinute !== '')));
+  // 用共享 validateForm 做真实校验（非法日期/越界年份/时间缺失都会拦截）
+  // 注意：validateForm 合法时也返回 {year:'',month:'',day:''}（值为空串），
+  // 因此必须判断「是否有非空错误值」，不能用 Object.keys().length，否则恒为不通过。
+  const isFormReady = (f: BirthFormState | null): boolean => Object.values(validateForm(f)).every((v) => !v);
 
   async function run() {
     setErr(false);
-    if (!isFormReady(form)) { setErr(true); return; }
+    setApiMissing(false);
+    if (!isFormReady(form)) {
+      const missing = Object.values(validateForm(form)).filter(Boolean).join('；');
+      setErrMsg(`请先完善出生信息：${missing}`);
+      setErr(true);
+      return;
+    }
+    // 年份校验：空输入 Number('') 会变 0，非法年份一律拦截
+    if (!Number.isInteger(year) || year < 1900 || year > 2100) {
+      setErr(true);
+      setErrMsg('请输入 1900–2100 之间的分析年份');
+      return;
+    }
     setAnalyzing(true);
     setAnalysis('');
     try {
-      if (!chart) {
-        const c = buildChart(formToBirthInfo(form!));
-        setChart(c);
-      }
+      // 闭包中的 chart 仍是旧值，统一用本地变量，避免同步重复 buildChart
+      const c = chart ?? buildChart(formToBirthInfo(form!));
+      if (!chart) setChart(c);
       const res = await fetch('/api/fortune', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chart: chart ?? buildChart(formToBirthInfo(form!)), year }),
+        body: JSON.stringify({ chart: c, year }),
       });
       if (res.status === 404) { setApiMissing(true); throw new Error('api-missing'); }
       if (!res.ok || !res.body) throw new Error();
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
       let text = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') break;
-          try { text += JSON.parse(data).delta?.text ?? ''; setAnalysis(text); } catch { /* skip */ }
-        }
-      }
+      await readSseStream(res.body, (data) => {
+        if (data === '[DONE]') return;
+        try { text += JSON.parse(data).delta?.text ?? ''; setAnalysis(text); } catch { /* skip */ }
+      });
       setTimeout(() => analysisRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-    } catch {
+    } catch (e) {
+      if (e instanceof Error && e.message !== 'api-missing') setErrMsg('解读服务暂时不可用，请稍后重试');
       setErr(true);
     } finally {
       setAnalyzing(false);
@@ -110,17 +117,20 @@ export default function FortunePage() {
         <div style={{ ...cardStyle, marginBottom: '24px' }}>
           <span style={labelStyle}>出生信息</span>
           <BirthForm hideSubmit onSubmit={() => {}} onFormSave={setForm} />
+          <p style={{ marginTop: '10px', fontSize: '11px', color: 'var(--tx-3)', textAlign: 'center' }}>
+            会自动带入上次填写或最近保存的命盘档案；如无记录按提示填写一次即可，之后无需重填
+          </p>
         </div>
 
         <div style={{ ...cardStyle, marginBottom: '24px' }}>
           <span style={labelStyle}>分析年份</span>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="input-base" style={{ fontSize: '14px', width: '140px' }} />
+            <input type="number" value={year} min={1900} max={2100} onChange={(e) => setYear(Number(e.target.value))} className="input-base" style={{ fontSize: '14px', width: '140px' }} />
             <button onClick={run} disabled={analyzing} style={{ padding: '10px 28px', borderRadius: 'var(--r-pill)', border: 'none', background: 'linear-gradient(135deg, #9a6210, #c88020)', color: '#fff8e8', fontSize: '14px', fontWeight: 600, letterSpacing: '0.15em', cursor: analyzing ? 'not-allowed' : 'pointer', opacity: analyzing ? 0.6 : 1 }}>
               {analyzing ? '分析中…' : '开始分析'}
             </button>
           </div>
-          {err && !apiMissing && <div style={{ marginTop: '12px', fontSize: '13px', color: '#dc2626' }}>请先填写完整出生信息</div>}
+          {err && !apiMissing && <div style={{ marginTop: '12px', fontSize: '13px', color: '#dc2626' }}>{errMsg || '请先填写完整出生信息'}</div>}
         </div>
 
         <div ref={analysisRef} style={{ ...cardStyle, minHeight: '220px', padding: '28px' }}>

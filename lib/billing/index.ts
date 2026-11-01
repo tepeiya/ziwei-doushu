@@ -46,6 +46,40 @@ export function getPlan(id: string): Plan | undefined {
   return (PLANS as Record<string, Plan>)[id];
 }
 
+/** 后台可对套餐做的覆盖项（存于 DB settings.plans）。 */
+export interface PlanOverride {
+  name?: string;
+  priceFen?: number;
+  durationDays?: number;
+  enabled?: boolean;
+}
+
+/**
+ * 把后台设置的覆盖项合并到默认套餐上，得到对外生效的套餐列表。
+ * enabled === false 的套餐会被隐藏。
+ */
+export function mergePlans(overrides: Record<string, PlanOverride> = {}): Plan[] {
+  return (Object.keys(PLANS) as Plan['id'][])
+    .map((id) => {
+      const base = PLANS[id];
+      const ov = overrides[id] ?? {};
+      return {
+        ...base,
+        name: ov.name ?? base.name,
+        priceFen: typeof ov.priceFen === 'number' ? ov.priceFen : base.priceFen,
+        period: typeof ov.durationDays === 'number' ? `${ov.durationDays} 天` : base.period,
+      } as Plan;
+    })
+    .filter((p) => overrides[p.id]?.enabled !== false);
+}
+
+/** 取某套餐的生效时长（天），后台未设置时回退默认。 */
+export function planDurationDays(id: string, overrides: Record<string, PlanOverride> = {}): number {
+  const ov = overrides[id]?.durationDays;
+  if (typeof ov === 'number' && ov > 0) return ov;
+  return id === 'yearly' ? 365 : id === 'monthly' ? 30 : 0;
+}
+
 export function formatYuan(fen: number): string {
   return `¥${(fen / 100).toFixed(fen % 100 === 0 ? 0 : 2)}`;
 }

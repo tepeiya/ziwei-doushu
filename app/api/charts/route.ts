@@ -11,6 +11,15 @@ async function requireUser() {
   return uid ?? null;
 }
 
+// 由 birthInfo 计算去重签名：相同生辰视为同一命盘，避免重复保存
+function chartSig(birthInfo: unknown): string | null {
+  const b = birthInfo as Record<string, unknown> | null | undefined;
+  if (!b) return null;
+  const fields = [b.year, b.month, b.day, b.hour, b.gender, b.city ?? b.province ?? ''];
+  if (fields.some((f) => f === undefined || f === null || f === '')) return null;
+  return fields.join('|');
+}
+
 // 保存命盘（需登录）
 export async function POST(req: NextRequest) {
   const uid = await requireUser();
@@ -22,6 +31,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '请求格式错误' }, { status: 400 });
   }
   if (!body.chart) return NextResponse.json({ error: '缺少命盘数据' }, { status: 400 });
+  // 同一生辰已存在则直接返回既有记录，避免自动保存反复堆积
+  const sig = chartSig(body.birthInfo);
+  if (sig) {
+    const existing = (await listCharts(uid, 200)).find((c) => chartSig(c.birthInfo) === sig);
+    if (existing) {
+      return NextResponse.json({ ok: true, id: existing.id, createdAt: existing.createdAt, deduplicated: true });
+    }
+  }
   const rec = await saveChart({
     userId: uid,
     birthInfo: body.birthInfo,

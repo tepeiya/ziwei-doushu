@@ -37,7 +37,34 @@ export interface User {
   passwordHash?: string;
   nickname?: string;
   createdAt: number;
+  trialUses?: number; // 已使用免费试用次数（PG 模式持久化于此字段）
+  role?: 'user' | 'admin'; // 后台管理员标记
 }
+
+// ─── 后台可配置项 ────────────────────────────────────────────
+export interface PlanSetting {
+  name?: string;
+  priceFen?: number;
+  durationDays?: number;
+  enabled?: boolean;
+}
+/** 支付配置（后台可维护，覆盖环境变量）。留空字段表示沿用环境变量。 */
+export interface PaymentSettings {
+  channel?: 'auto' | 'sandbox' | 'wechat' | 'alipay';
+  wechatAppId?: string;
+  wechatMchId?: string;
+  wechatApiKey?: string;
+  alipayAppId?: string;
+  alipayPrivateKey?: string; // PKCS8
+  alipayPublicKey?: string;
+}
+export interface Settings {
+  trialUses: number; // 非会员免费试用次数
+  plans: Record<string, PlanSetting>; // 按套餐 id 覆盖默认值
+  payment?: PaymentSettings;
+  updatedAt?: number;
+}
+export const DEFAULT_SETTINGS: Settings = { trialUses: 3, plans: {}, payment: { channel: 'auto' } };
 
 export interface Membership {
   userId: string;
@@ -143,17 +170,25 @@ interface DBShape {
   memberships: Membership[];
   charts: SavedChart[];
   orders: Order[];
+  trials: Record<string, number>; // identityId -> 已用免费试用次数
+  settings?: Settings; // 后台可配置项（试用次数 / 套餐）
 }
 
 let cache: DBShape | null = null;
+// 缓存对应的文件 mtime：文件被其它进程写入（并发 dev server、手工改档）时重新加载，
+// 避免读到过期数据，也避免本进程稍后保存时把别人的写入覆盖掉。
+let cacheMtimeMs = 0;
 
 async function load(): Promise<DBShape> {
-  if (cache) return cache;
   try {
+    const st = await fs.stat(DB_FILE);
+    if (cache && st.mtimeMs === cacheMtimeMs) return cache;
     const raw = await fs.readFile(DB_FILE, 'utf-8');
     cache = JSON.parse(raw);
+    cacheMtimeMs = st.mtimeMs;
   } catch {
-    cache = { users: [], memberships: [], charts: [], orders: [] };
+    cache = { users: [], memberships: [], charts: [], orders: [], trials: {}, settings: { ...DEFAULT_SETTINGS } };
+    cacheMtimeMs = 0;
   }
   return cache!;
 }
@@ -161,6 +196,12 @@ async function load(): Promise<DBShape> {
 async function save(db: DBShape): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+  try {
+    const st = await fs.stat(DB_FILE);
+    cacheMtimeMs = st.mtimeMs;
+  } catch {
+    cacheMtimeMs = 0;
+  }
 }
 
 function newId(prefix: string): string {
@@ -176,6 +217,8 @@ function toUser(u: any): User {
     passwordHash: u.passwordHash ?? undefined,
     nickname: u.nickname ?? undefined,
     createdAt: toNum(u.createdAt),
+    trialUses: u.trialUses ?? 0,
+    role: (u.role as 'user' | 'admin') ?? 'user',
   };
 }
 function toMembership(m: any): Membership {
@@ -470,4 +513,176 @@ export async function markOrderPaid(id: string, channel?: string): Promise<Order
     await activateMembership(o.userId, o.plan as 'monthly' | 'yearly');
   }
   return o;
+}
+
+// ─── 试用次数 ─────────────────────────────────────────────
+// 记录每个身份（登录用户 id 或游客 guest cookie）已使用的免费解读次数。
+export async function getTrialUsed(id: string): Promise<number> {
+  const p = getPrisma();
+  if (p) {
+    try {
+      const u = await p.user.findUnique({ where: { id } });
+      return u?.trialUses ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+  const db = await load();
+  return db.trials?.[id] ?? 0;
+}
+
+export async function incTrial(id: string): Promise<void> {
+  const p = getPrisma();
+  if (p) {
+    try {
+      await p.user.update({ where: { id }, data: { trialUses: { increment: 1 } } });
+    } catch {
+      /* 无 trialUses 列时静默忽略（JSON 模式为主） */
+    }
+    return;
+  }
+  const db = await load();
+  if (!db.trials) db.trials = {};
+  db.trials[id] = (db.trials[id] ?? 0) + 1;
+  await save(db);
+}
+
+// ─── 后台：设置（试用次数 / 套餐）────────────────────────────
+export async function getSettings(): Promise<Settings> {
+  const p = getPrisma();
+  if (p) {
+    try {
+      const row = await p.setting.findUnique({ where: { key: 'app' } });
+      if (row) return { ...DEFAULT_SETTINGS, ...(JSON.parse(row.value) as Partial<Settings>) };
+    } catch {
+      /* 尚未建 Setting 表时回退默认值 */
+    }
+    return { ...DEFAULT_SETTINGS };
+  }
+  const db = await load();
+  return { ...DEFAULT_SETTINGS, ...(db.settings ?? {}) };
+}
+
+export async function updateSettings(patch: Partial<Settings>): Promise<Settings> {
+  const cur = await getSettings();
+  const next: Settings = {
+    ...cur,
+    ...patch,
+    plans: { ...cur.plans, ...(patch.plans ?? {}) },
+    updatedAt: Date.now(),
+  };
+  const p = getPrisma();
+  if (p) {
+    try {
+      await p.setting.upsert({
+        where: { key: 'app' },
+        create: { key: 'app', value: JSON.stringify(next) },
+        update: { value: JSON.stringify(next) },
+      });
+    } catch {
+      /* 无 Setting 表时仅本次进程生效 */
+    }
+    return next;
+  }
+  const db = await load();
+  db.settings = next;
+  await save(db);
+  return next;
+}
+
+// ─── 后台：用户 / 订单查询 ───────────────────────────────────
+export async function listUsers(): Promise<User[]> {
+  const p = getPrisma();
+  if (p) {
+    const rows = await p.user.findMany({ orderBy: { createdAt: 'desc' } });
+    return rows.map(toUser);
+  }
+  const db = await load();
+  return [...db.users].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function listOrders(limit = 100): Promise<Order[]> {
+  const p = getPrisma();
+  if (p) {
+    const rows = await p.order.findMany({ orderBy: { createdAt: 'desc' }, take: limit });
+    return rows.map(toOrder);
+  }
+  const db = await load();
+  return [...db.orders].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+}
+
+export async function setUserRole(userId: string, role: 'user' | 'admin'): Promise<User | undefined> {
+  const p = getPrisma();
+  if (p) {
+    const u = await p.user.update({ where: { id: userId }, data: { role } });
+    return toUser(u);
+  }
+  const db = await load();
+  const u = db.users.find((x) => x.id === userId);
+  if (!u) return undefined;
+  u.role = role;
+  await save(db);
+  return u;
+}
+
+// ─── 后台：会员授予 / 撤销 ───────────────────────────────────
+/** 授予或延长会员：从「当前有效期」与「现在」取较晚者再顺延 days 天。 */
+export async function setMembership(
+  userId: string,
+  plan: MembershipPlan,
+  days: number,
+): Promise<Membership> {
+  const now = Date.now();
+  const add = Math.max(0, days) * 24 * 3600 * 1000;
+  const p = getPrisma();
+  if (p) {
+    const existing = await p.membership.findUnique({ where: { userId } });
+    const base = existing ? Math.max(existing.expiresAt.getTime(), now) : now;
+    const data = {
+      plan,
+      status: 'active' as const,
+      startedAt: new Date(now),
+      expiresAt: new Date(base + add),
+    };
+    const m = await p.membership.upsert({
+      where: { userId },
+      create: { userId, ...data },
+      update: data,
+    });
+    return toMembership(m);
+  }
+  const db = await load();
+  let m = db.memberships.find((x) => x.userId === userId);
+  if (!m) {
+    m = { userId, plan, status: 'active', startedAt: now, expiresAt: now + add };
+    db.memberships.push(m);
+  } else {
+    m.plan = plan;
+    m.status = 'active';
+    m.startedAt = m.startedAt || now;
+    m.expiresAt = Math.max(m.expiresAt, now) + add;
+  }
+  await save(db);
+  return m;
+}
+
+/** 撤销会员：立即置为已过期。 */
+export async function revokeMembership(userId: string): Promise<Membership | undefined> {
+  const p = getPrisma();
+  if (p) {
+    const existing = await p.membership.findUnique({ where: { userId } });
+    if (!existing) return undefined;
+    const m = await p.membership.update({
+      where: { userId },
+      data: { status: 'expired', expiresAt: new Date(Date.now()) },
+    });
+    return toMembership(m);
+  }
+  const db = await load();
+  const m = db.memberships.find((x) => x.userId === userId);
+  if (!m) return undefined;
+  m.status = 'expired';
+  m.expiresAt = Date.now();
+  await save(db);
+  return m;
 }

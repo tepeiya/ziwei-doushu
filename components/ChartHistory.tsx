@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { formatShichen } from '@/lib/ziwei/constants';
 
 export interface ChartItem {
   id: string;
@@ -11,8 +12,7 @@ export interface ChartItem {
 
 function fmtBirth(b?: ChartItem['birthInfo']): string {
   if (!b) return '未知生辰';
-  const h = b.hour === 0 || b.hour === 23 ? '子时' : `${b.hour ?? '?'}时`;
-  return `${b.year ?? '?'}年${b.month ?? '?'}月${b.day ?? '?'}日 ${h} · ${b.gender === 'male' ? '男' : b.gender === 'female' ? '女' : ''}`;
+  return `${b.year ?? '?'}年${b.month ?? '?'}月${b.day ?? '?'}日 ${formatShichen(b.hour)} · ${b.gender === 'male' ? '男' : b.gender === 'female' ? '女' : ''}`;
 }
 
 export default function ChartHistory({ charts }: { charts: ChartItem[] }) {
@@ -23,8 +23,11 @@ export default function ChartHistory({ charts }: { charts: ChartItem[] }) {
     if (!confirm('确定删除该命盘？')) return;
     setBusy(id);
     try {
-      await fetch(`/api/charts?id=${id}`, { method: 'DELETE' });
-      setList((l) => l.filter((c) => c.id !== id));
+      const res = await fetch(`/api/charts?id=${id}`, { method: 'DELETE' });
+      // 删除失败时保持本地列表与后端一致（否则刷新后条目「复活」）
+      if (res.ok || res.status === 204) {
+        setList((l) => l.filter((c) => c.id !== id));
+      }
     } finally {
       setBusy(null);
     }

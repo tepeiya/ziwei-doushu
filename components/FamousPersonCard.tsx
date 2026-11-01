@@ -1,5 +1,6 @@
 'use client';
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import type { FamousPerson } from '@/lib/ziwei/famous';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -10,7 +11,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   '历史': '#facc15',
 };
 
-export default function FamousPersonCard({ person }: { person: FamousPerson }) {
+export default function FamousPersonCard({ person, shareHref }: { person: FamousPerson; shareHref?: string }) {
   const catColor = CATEGORY_COLORS[person.category] ?? '#d4a843';
   return (
     <motion.div
@@ -57,8 +58,23 @@ export default function FamousPersonCard({ person }: { person: FamousPerson }) {
         </div>
 
         <div className="text-[10px] mt-2" style={{ color: 'var(--t-faint)', opacity: 0.6, lineHeight: 1.5 }}>
-          ⚠️ 出生时辰为公开文献估算值，仅供研究参考。下方 AI 解读基于此命盘自动生成，与本人无关。
+          ⚠️ 出生时辰为公开文献估算值，仅供研究参考。点击下方按钮会以此为出生信息生成一张新命盘用于兴趣体验，与本人真实命盘无关。
         </div>
+
+        {shareHref && (
+          <Link
+            href={shareHref}
+            className="inline-flex items-center gap-1 mt-3 text-[11px] px-3 py-1.5 rounded-full transition-colors hover:brightness-110"
+            style={{
+              color: catColor,
+              border: `1px solid ${catColor}55`,
+              background: catColor + '10',
+              textDecoration: 'none',
+            }}
+          >
+            ◈ 用这条出生信息起盘 →
+          </Link>
+        )}
       </div>
     </motion.div>
   );

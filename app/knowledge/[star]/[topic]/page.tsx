@@ -29,7 +29,8 @@ import { SITE_URL } from '@/lib/site';
 
 // 允许动态参数：如果某个 star/topic 组合不在 generateStaticParams 列表中
 // 也允许运行时按需渲染，避免中文 URL 编码问题导致 404
-export const dynamicParams = false;
+// （dynamicParams 保持默认 true；设为 false 会让未预生成的组合直接 404，与上述意图相反）
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
   const routes = getAllKnowledgeRoutes();
@@ -106,7 +107,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
 
       {/* 顶栏 */}
       <div className="px-6 py-4 flex items-center justify-between"
-        style={{ borderBottom: '1px solid rgba(184,146,42,0.15)', background: 'var(--bg-page)' }}>
+        style={{ borderBottom: '1px solid var(--bdr)', background: 'var(--bg-page)' }}>
         <Link href="/" style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.3em', textDecoration: 'none' }}>
           ← 首页
         </Link>
@@ -156,7 +157,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
 
         {data.parsed.lundian && (
           <Section title="核心论断">
-            <div style={{ fontSize: '15px', color: 'var(--tx-0)', lineHeight: 2, letterSpacing: '0.02em', whiteSpace: 'pre-wrap' }}>
+            <div style={{ fontSize: '15px', color: 'var(--tx-1)', lineHeight: 2, letterSpacing: '0.02em', whiteSpace: 'pre-wrap' }}>
               {data.parsed.lundian}
             </div>
           </Section>
@@ -164,7 +165,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
 
         {data.parsed.yiju && (
           <Section title="命盘依据">
-            <div style={{ fontSize: '14px', color: 'var(--tx-0)', lineHeight: 2, letterSpacing: '0.02em', whiteSpace: 'pre-wrap' }}>
+            <div style={{ fontSize: '14px', color: 'var(--tx-1)', lineHeight: 2, letterSpacing: '0.02em', whiteSpace: 'pre-wrap' }}>
               {data.parsed.yiju}
             </div>
           </Section>
@@ -182,9 +183,10 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
         <div style={{
           margin: '40px 0 30px',
           padding: '24px',
-          background: 'linear-gradient(135deg, rgba(212,169,72,0.15) 0%, rgba(184,146,42,0.06) 100%)',
-          borderRadius: '14px',
-          border: '1px solid rgba(184,146,42,0.3)',
+          background: 'var(--bg-card)',
+          borderRadius: 'var(--r-lg)',
+          border: '1px solid var(--bdr)',
+          boxShadow: 'var(--sh-md)',
           textAlign: 'center',
         }}>
           <div style={{ fontSize: '14px', color: 'var(--tx-0)', fontWeight: 600, letterSpacing: '0.1em', marginBottom: '6px' }}>
@@ -196,14 +198,14 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
           <Link href="/chart" style={{
             display: 'inline-block',
             padding: '12px 28px',
-            background: 'linear-gradient(135deg, #d4a948 0%, #b8922a 100%)',
+            background: 'var(--ac)',
             color: 'white',
-            borderRadius: '999px',
+            borderRadius: 'var(--r-pill)',
             fontSize: '14px',
             fontWeight: 600,
             letterSpacing: '0.15em',
             textDecoration: 'none',
-            boxShadow: '0 4px 12px rgba(184,146,42,0.3)',
+            boxShadow: 'var(--sh-sm)',
           }}>
             立即起盘 →
           </Link>
@@ -222,7 +224,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
                     fontSize: '12px',
                     padding: '6px 12px',
                     background: 'var(--bg-card)',
-                    border: '1px solid rgba(184,146,42,0.25)',
+                    border: '1px solid var(--bdr)',
                     borderRadius: '999px',
                     color: 'var(--tx-2)',
                     textDecoration: 'none',
@@ -246,7 +248,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
                   fontSize: '12px',
                   padding: '6px 12px',
                   background: 'var(--bg-card)',
-                  border: '1px solid rgba(184,146,42,0.25)',
+                  border: '1px solid var(--bdr)',
                   borderRadius: '999px',
                   color: 'var(--tx-2)',
                   textDecoration: 'none',
@@ -262,9 +264,9 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
         <div style={{
           marginTop: '40px',
           padding: '16px 20px',
-          background: 'rgba(184,146,42,0.04)',
-          border: '1px dashed rgba(184,146,42,0.25)',
-          borderRadius: '10px',
+          background: 'var(--bg-1)',
+          border: '1px dashed var(--bdr)',
+          borderRadius: 'var(--r-md)',
           textAlign: 'center',
         }}>
           <div style={{ fontSize: '11px', color: 'var(--ac-dim)', letterSpacing: '0.15em', marginBottom: '6px' }}>
@@ -277,7 +279,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
       </article>
 
       {/* 页脚 */}
-      <footer style={{ borderTop: '1px solid rgba(184,146,42,0.15)', padding: '20px 24px', textAlign: 'center', fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.1em' }}>
+      <footer style={{ borderTop: '1px solid var(--bdr)', padding: '20px 24px', textAlign: 'center', fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.1em' }}>
         <div style={{ marginBottom: '6px' }}>紫微研究 · 基于传统正宗体系 · 仅供学习参考</div>
         <div style={{ opacity: 0.85 }}>本平台不构成任何医疗、投资、法律或重大决策建议</div>
       </footer>
@@ -302,11 +304,10 @@ function Section({ title, children, gradient, minimal }: { title: string; childr
         {title}
       </h2>
       <div style={{
-        background: gradient
-          ? 'linear-gradient(135deg, rgba(212,169,72,0.12) 0%, rgba(184,146,42,0.04) 100%)'
-          : 'white',
-        border: '1px solid rgba(184,146,42,0.15)',
-        borderRadius: '10px',
+        background: 'var(--bg-card)',
+        border: gradient ? '1px solid var(--ac-bdr)' : '1px solid var(--bdr)',
+        borderRadius: 'var(--r-md)',
+        boxShadow: 'var(--sh-sm)',
         padding: minimal ? '14px 18px' : '20px 22px',
       }}>
         {children}

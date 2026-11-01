@@ -1,12 +1,13 @@
 'use client';
 import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import BirthForm, { type BirthFormState } from '@/components/BirthForm';
+import BirthForm, { validateForm, type BirthFormState } from '@/components/BirthForm';
 import { formToBirthInfo } from '@/lib/ziwei/share';
 import { generateChart as buildChart } from '@/lib/ziwei/algorithm';
 import type { BirthInfo, ZiweiChart } from '@/lib/ziwei/types';
 import { useTheme } from '@/components/ThemeProvider';
 import SiteNav from '@/components/SiteNav';
+import { readSseStream } from '@/lib/sse-client';
 
 // ─── AiContent 渲染器（与 InsightPanel 一致）────────────────
 function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
@@ -80,9 +81,10 @@ export default function HemingPage() {
     }
   }, []);
 
-  // 表单是否填齐
-  const isFormReady = (f: BirthFormState | null): boolean =>
-    !!(f && f.year && f.month && f.day && f.gender && (f.unknownTime || (f.clockHour !== '' && f.clockMinute !== '')));
+  // 用共享 validateForm 做真实校验（非法日期/越界年份/时间缺失都会拦截）
+  // 注意：validateForm 合法时也返回 {year:'',month:'',day:''}（值为空串），
+  // 因此必须判断「是否有非空错误值」，不能用 Object.keys().length，否则恒为不通过。
+  const isFormReady = (f: BirthFormState | null): boolean => Object.values(validateForm(f)).every((v) => !v);
 
   // ─── 统一入口：起盘 + 合盘分析 ─────────────────────────────
   const runAnalysis = useCallback(async (q?: string) => {
@@ -121,25 +123,16 @@ export default function HemingPage() {
       if (res.status === 404) { setApiMissing(true); throw new Error('api-missing'); }
       if (!res.ok || !res.body) throw new Error();
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
       let text = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') break;
-          try {
-            const delta = JSON.parse(data).delta?.text ?? '';
-            text += delta;
-            setAnalysis(text);
-          } catch { /* skip */ }
-        }
-      }
+      await readSseStream(res.body, (data) => {
+        if (data === '[DONE]') return;
+        try {
+          const delta = JSON.parse(data).delta?.text ?? '';
+          text += delta;
+          setAnalysis(text);
+        } catch { /* skip */ }
+      });
       // scroll to analysis
       setTimeout(() => analysisRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     } catch {
@@ -189,6 +182,8 @@ export default function HemingPage() {
               hideSubmit
               onSubmit={() => {}}
               onFormSave={setFormA}
+              storageKey="heming-a"
+              autoRestore={false}
             />
           </div>
 
@@ -199,6 +194,8 @@ export default function HemingPage() {
               hideSubmit
               onSubmit={() => {}}
               onFormSave={setFormB}
+              storageKey="heming-b"
+              autoRestore={false}
             />
           </div>
         </div>

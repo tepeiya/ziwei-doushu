@@ -17,11 +17,30 @@ export default function LoginPage() {
     if (!identifier || !password) { setErr('请填写账号和密码'); return; }
     setErr('');
     setLoading(true);
-    const res = await signIn('credentials', { identifier, password, redirect: false });
-    setLoading(false);
-    if (res?.error) { setErr('账号或密码错误'); return; }
-    router.push('/profile');
-    router.refresh();
+    try {
+      const res = await signIn('credentials', { identifier, password, redirect: false });
+      setLoading(false);
+      if (res?.error) { setErr('账号或密码错误'); return; }
+      // 默认回跳：?redirect=/xxx（仅允许站内路径，防开放重定向）
+      const raw = new URLSearchParams(window.location.search).get('redirect');
+      const fallback = raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/profile';
+
+      // 若未指定回跳地址，且该账号是管理员，直接进入系统管理
+      let target = fallback;
+      if (!raw) {
+        try {
+          const me = (await fetch('/api/me').then((r) => r.json())) as { isAdmin?: boolean };
+          if (me?.isAdmin) target = '/admin';
+        } catch {
+          /* 查询失败则用默认回跳 */
+        }
+      }
+      router.push(target);
+      router.refresh();
+    } catch {
+      setLoading(false);
+      setErr('网络异常，请重试');
+    }
   }
 
   return (
