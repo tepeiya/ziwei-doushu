@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { exportChartPdf, buildV4Section } from '@/lib/exportPdf';
+import { exportChartPdf, buildV4Section, buildPlainSummary } from '@/lib/exportPdf';
 import { readSseStream } from '@/lib/sse-client';
 import { formatShichen } from '@/lib/ziwei/constants';
 import type { ZiweiChart, Palace } from '@/lib/ziwei/types';
@@ -457,13 +457,15 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
       const aiText = messages.filter((m) => m.role === 'assistant').map((m) => m.content).join('\n\n');
       const b = chart.birthInfo;
       const birth = b ? `${b.year}年${b.month}月${b.day}日 ${formatShichen(b.hour)}` : '';
-      // 一并拉取 v4.0 数据集的 13 维原生解读，拼在 AI 解读之后
-      let text = aiText;
+      // 依次拼装：AI 解读 → v4.0 原生解读 → 白话总结（固定置于文末）
+      const parts: string[] = aiText.trim() ? [aiText] : [];
       if (b) {
         const v4 = await buildV4Section(b);
-        if (v4) text = `${aiText}\n\n${v4}`;
+        if (v4) parts.push(v4);
       }
-      await exportChartPdf({ name: b?.name || '', birth, text, chart });
+      const summary = await buildPlainSummary(chart);
+      if (summary) parts.push(`**【白话总结】**\n\n${summary}`);
+      await exportChartPdf({ name: b?.name || '', birth, text: parts.join('\n\n'), chart });
     } catch (e) {
       console.error('exportChartPdf failed', e);
       setPdfError(true);
@@ -490,7 +492,10 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
           <span>会员专享 · 无限次 AI 解读 · <a href="/pricing" style={{ textDecoration: 'underline' }}>管理 / 续费</a></span>
         ) : session?.user ? (
           <span>
-            免费试用剩余 <b>{quota ? quota.trialRemaining : DEFAULT_TRIAL}</b> / {quota?.trialLimit ?? DEFAULT_TRIAL} 次 ·{' '}
+            免费试用剩余 <b>{quota ? quota.trialRemaining : DEFAULT_TRIAL}</b>
+            {quota && (quota.trialRemaining ?? 0) > quota.trialLimit
+              ? ' 次（含付费赠送）'
+              : ` / ${quota?.trialLimit ?? DEFAULT_TRIAL} 次`} ·{' '}
             <a href="/pricing" style={{ textDecoration: 'underline' }}>开通会员无限解读</a>
           </span>
         ) : (
