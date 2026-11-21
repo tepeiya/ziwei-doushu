@@ -51,6 +51,10 @@ export default function PayPage() {
           setTimeout(() => router.push('/profile'), 1600);
           return;
         }
+        if (data.status === 'closed') {
+          setErr('订单已超时关闭，请重新下单');
+          return;
+        }
         if (data.gateway) timer = setTimeout(poll, 3000); // 仅网关订单轮询
       } catch {
         if (!cancelled) timer = setTimeout(poll, 5000);
@@ -72,8 +76,9 @@ export default function PayPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId }),
       });
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setErr('支付失败，请重试');
+        setErr(data?.error || '支付失败，请重试');
         setBusy(false);
         return;
       }
@@ -108,9 +113,10 @@ export default function PayPage() {
     );
   }
 
-  const isAlipay = order?.gateway === 'alipay';
-  const isWechat = order?.gateway === 'wechat';
-  const isSandbox = !order?.gateway;
+  const isClosed = order?.status === 'closed';
+  const isAlipay = !isClosed && order?.gateway === 'alipay';
+  const isWechat = !isClosed && order?.gateway === 'wechat';
+  const isSandbox = !isClosed && !order?.gateway;
 
   return (
     <div
@@ -138,7 +144,15 @@ export default function PayPage() {
       >
         <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--tx-0)', marginBottom: '6px' }}>订单支付</h1>
         <p style={{ fontSize: '12px', color: 'var(--tx-3)', marginBottom: '24px' }}>
-          {isSandbox ? '沙箱演示 · 模拟支付（不真实扣款）' : isAlipay ? '支付宝支付' : '微信支付 · 请扫码'}
+          {isClosed
+            ? '订单已关闭'
+            : isSandbox
+              ? '沙箱演示 · 模拟支付（不真实扣款）'
+              : isAlipay
+                ? '支付宝支付'
+                : isWechat
+                  ? '微信支付 · 请扫码'
+                  : '加载中…'}
         </p>
 
         {order ? (
@@ -252,7 +266,7 @@ export default function PayPage() {
             cursor: 'pointer',
           }}
         >
-          取消并返回
+          {isClosed ? '重新下单' : '取消并返回'}
         </button>
       </div>
     </div>

@@ -69,6 +69,8 @@ export default function HemingPage() {
   // 开源版不含 /api/heming：接口 404 时单独说明，而不是让用户反复重试
   const [apiMissing, setApiMissing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // 试用次数用尽（服务端 402）
+  const [paywall, setPaywall] = useState(false);
   const analysisRef = useRef<HTMLDivElement>(null);
 
   // ─── 起盘（单次调用，返回 chart 给统一流程使用）──────────
@@ -121,6 +123,7 @@ export default function HemingPage() {
         body: JSON.stringify({ chartA: cA, chartB: cB, question: q ?? undefined }),
       });
       if (res.status === 404) { setApiMissing(true); throw new Error('api-missing'); }
+      if (res.status === 402) { setPaywall(true); throw new Error('paywall'); }
       if (!res.ok || !res.body) throw new Error();
 
       let text = '';
@@ -135,7 +138,9 @@ export default function HemingPage() {
       });
       // scroll to analysis
       setTimeout(() => analysisRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-    } catch {
+    } catch (e) {
+      // 付费墙已单独弹窗引导，不再显示「分析暂时不可用」
+      if (e instanceof Error && e.message === 'paywall') return;
       setAnalysisError(true);
     } finally {
       setAnalyzing(false);
@@ -334,6 +339,32 @@ export default function HemingPage() {
           </div>
         )}
       </div>
+
+      {/* ── 付费墙弹窗（试用次数用尽，合盘与解读/年运共用额度）── */}
+      {paywall && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(8,6,4,0.6)', backdropFilter: 'blur(2px)' }}
+          onClick={() => setPaywall(false)}
+        >
+          <div
+            className="w-full max-w-[380px] rounded-2xl p-6 text-center"
+            style={{ background: 'var(--bg-0)', border: '1px solid rgba(212,168,67,0.35)', boxShadow: '0 20px 60px rgba(0,0,0,0.45)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '28px', marginBottom: 12, color: 'var(--ac)' }}>🔒</div>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--tx-0)' }}>免费试用已用完</h3>
+            <p style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 20, color: 'var(--tx-2)' }}>
+              您已用完免费 AI 解读次数（合盘与命盘解读、年度运势共用额度）。开通会员即可无限次生成合盘分析。
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <a href="/pricing" onClick={() => setPaywall(false)} style={{ display: 'block', padding: '10px 0', borderRadius: 10, fontSize: 13, fontWeight: 600, background: 'linear-gradient(135deg,#9a6210,#c88020)', color: '#fff8e8' }}>开通会员</a>
+              <a href="/login?redirect=/heming" onClick={() => setPaywall(false)} style={{ display: 'block', padding: '10px 0', borderRadius: 10, fontSize: 13, border: '1px solid var(--bdr-med)', color: 'var(--tx-2)' }}>登录账号</a>
+              <button onClick={() => setPaywall(false)} style={{ padding: '8px 0', fontSize: 12, color: 'var(--tx-3)' }}>稍后再说</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @media (max-width: 680px) {

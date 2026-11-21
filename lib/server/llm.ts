@@ -54,6 +54,18 @@ export function getLLMConfig() {
 const NO_KEY_HINT =
   '⚠️ 尚未配置 AI 解读所需的 API Key。请在项目根目录的 .env.local 中设置 ' +
   'AI_PROVIDER 与对应密钥（如 DEEPSEEK_API_KEY），保存后重启服务即可使用解读功能。';
+const CONNECT_FAIL_HINT = '⚠️ 无法连接 AI 服务，请检查网络与 API 端点配置。';
+const SERVICE_ERROR_HINT_PREFIX = '⚠️ AI 服务返回错误（';
+
+/**
+ * streamChat 在异常时不抛错，而是产出下面的降级说明文本。
+ * 调用方（审查管道 / 各 AI 接口）据此判断「本次生成其实失败了」，
+ * 以便返还已扣的试用次数，避免失败也扣费。
+ */
+export function isLLMFailureNotice(text: string): boolean {
+  const t = text.trim();
+  return t === NO_KEY_HINT || t === CONNECT_FAIL_HINT || t.startsWith(SERVICE_ERROR_HINT_PREFIX);
+}
 
 /**
  * 流式对话。按 OpenAI chat/completions SSE 协议逐块产出文本增量。
@@ -87,12 +99,12 @@ export async function* streamChat(
       }),
     });
   } catch {
-    yield '⚠️ 无法连接 AI 服务，请检查网络与 API 端点配置。';
+    yield CONNECT_FAIL_HINT;
     return;
   }
 
   if (!res.ok || !res.body) {
-    yield `⚠️ AI 服务返回错误（${res.status}），请检查 API Key 与额度。`;
+    yield `${SERVICE_ERROR_HINT_PREFIX}${res.status}），请检查 API Key 与额度。`;
     return;
   }
 

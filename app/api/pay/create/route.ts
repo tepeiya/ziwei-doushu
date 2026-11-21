@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { createOrder } from '@/lib/db';
-import { getPlan } from '@/lib/billing';
+import { createOrder, getSettings } from '@/lib/db';
+import { mergePlans } from '@/lib/billing';
 import { cacheSet } from '@/lib/server/cache';
 import { createPayment } from '@/lib/server/payments';
 import { getPaymentConfig, resolveChannel } from '@/lib/payment-config';
@@ -20,8 +20,10 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: '请求错误' }, { status: 400 });
   }
-  const plan = getPlan(planId);
-  if (!plan) return NextResponse.json({ error: '套餐不存在' }, { status: 404 });
+  // 生效套餐：后台覆盖价优先。金额一律由服务端决定，且已停用套餐不得下单。
+  const settings = await getSettings();
+  const plan = mergePlans(settings.plans ?? {}).find((p) => p.id === planId);
+  if (!plan) return NextResponse.json({ error: '套餐不存在或已下架' }, { status: 404 });
 
   // 支付渠道：后台设置优先，其次环境变量；两者都未配齐 → 沙箱
   const cfg = await getPaymentConfig();

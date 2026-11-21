@@ -2,6 +2,9 @@
  * 套餐与计费定义
  * 价格单位：分（人民币）。生产接入微信/支付宝时，金额直接复用 priceFen。
  */
+/** 游客身份 cookie 名（未登录时的试用计数身份）。 */
+export const GUEST_COOKIE = 'ziwei_guest';
+
 export interface Plan {
   id: 'single' | 'monthly' | 'yearly';
   name: string;
@@ -11,6 +14,8 @@ export interface Plan {
   features: string[];
   tag?: string;
   popular?: boolean;
+  /** 按次商品：支付成功后赠送的 AI 解读次数（会员档不填）。 */
+  grantUses?: number;
 }
 
 export const PLANS: Record<Plan['id'], Plan> = {
@@ -20,6 +25,7 @@ export const PLANS: Record<Plan['id'], Plan> = {
     priceFen: 1990,
     desc: '一次完整 AI 命盘解读',
     features: ['13 维完整解读', '命盘永久保存', '可导出分享图'],
+    grantUses: 1,
   },
   monthly: {
     id: 'monthly',

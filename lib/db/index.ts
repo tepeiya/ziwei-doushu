@@ -14,6 +14,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { getPlan, planDurationDays } from '@/lib/billing';
 
 // Prisma client 延迟加载：未配置 DATABASE_URL 时绝不触碰（避免未生成 client 报错）。
 // 使用 require + any 是为了让「纯 JSON 模式」在无 DATABASE_URL 时也不依赖已生成的 client。
@@ -37,7 +38,6 @@ export interface User {
   passwordHash?: string;
   nickname?: string;
   createdAt: number;
-  trialUses?: number; // 已使用免费试用次数（PG 模式持久化于此字段）
   role?: 'user' | 'admin'; // 后台管理员标记
 }
 
@@ -171,6 +171,7 @@ interface DBShape {
   charts: SavedChart[];
   orders: Order[];
   trials: Record<string, number>; // identityId -> 已用免费试用次数
+  bonuses?: Record<string, number>; // identityId -> 付费赠送的解读次数
   settings?: Settings; // 后台可配置项（试用次数 / 套餐）
 }
 
@@ -217,7 +218,6 @@ function toUser(u: any): User {
     passwordHash: u.passwordHash ?? undefined,
     nickname: u.nickname ?? undefined,
     createdAt: toNum(u.createdAt),
-    trialUses: u.trialUses ?? 0,
     role: (u.role as 'user' | 'admin') ?? 'user',
   };
 }
@@ -253,10 +253,16 @@ function toOrder(o: any): Order {
   };
 }
 
-const PLAN_DURATION: Record<string, number> = {
-  monthly: 30 * 24 * 3600 * 1000,
-  yearly: 365 * 24 * 3600 * 1000,
-};
+/** 会员时长：后台覆盖 durationDays 优先，否则用套餐默认。 */
+async function planDurationMs(plan: 'monthly' | 'yearly'): Promise<number> {
+  let overrides: Record<string, PlanSetting> = {};
+  try {
+    overrides = (await getSettings()).plans ?? {};
+  } catch {
+    /* 读库失败按默认时长 */
+  }
+  return planDurationDays(plan, overrides) * 24 * 3600 * 1000;
+}
 
 // ─── 用户 ───────────────────────────────────────────────────
 export async function createUser(
@@ -340,7 +346,7 @@ export async function activateMembership(
 ): Promise<Membership> {
   const p = getPrisma();
   const now = Date.now();
-  const dur = PLAN_DURATION[plan] ?? PLAN_DURATION.monthly;
+  const dur = await planDurationMs(plan);
   if (p) {
     const existing = await p.membership.findUnique({ where: { userId } });
     const base = existing ? Math.max(existing.expiresAt.getTime(), now) : now;
@@ -488,6 +494,16 @@ export async function getOrder(id: string): Promise<Order | undefined> {
   return db.orders.find((o) => o.id === id);
 }
 
+/** 订单入账后的权益交付：月/年卡顺延会员期；按次商品（单次精批）发放解读次数。 */
+async function deliverEntitlement(plan: string, identityId: string): Promise<void> {
+  if (plan === 'monthly' || plan === 'yearly') {
+    await activateMembership(identityId, plan);
+    return;
+  }
+  const uses = getPlan(plan)?.grantUses;
+  if (uses) await grantTrialUses(identityId, uses);
+}
+
 export async function markOrderPaid(id: string, channel?: string): Promise<Order | undefined> {
   const p = getPrisma();
   if (p) {
@@ -497,9 +513,7 @@ export async function markOrderPaid(id: string, channel?: string): Promise<Order
       where: { id },
       data: { status: 'paid', paidAt: new Date(), ...(channel ? { channel } : {}) },
     });
-    if (updated.userId && (updated.plan === 'monthly' || updated.plan === 'yearly')) {
-      await activateMembership(updated.userId, updated.plan);
-    }
+    if (updated.userId) await deliverEntitlement(updated.plan, updated.userId);
     return toOrder(updated);
   }
   const db = await load();
@@ -509,23 +523,34 @@ export async function markOrderPaid(id: string, channel?: string): Promise<Order
   o.paidAt = Date.now();
   if (channel) o.channel = channel;
   await save(db);
-  if (o.userId && (o.plan === 'monthly' || o.plan === 'yearly')) {
-    await activateMembership(o.userId, o.plan as 'monthly' | 'yearly');
+  if (o.userId) await deliverEntitlement(o.plan, o.userId);
+  return o;
+}
+
+/** 超时关单：仅 pending → closed，已支付/已关闭的订单不动。 */
+export async function closeOrder(id: string): Promise<Order | undefined> {
+  const p = getPrisma();
+  if (p) {
+    const o = await p.order.findUnique({ where: { id } });
+    if (!o || o.status !== 'pending') return o ? toOrder(o) : undefined;
+    return toOrder(await p.order.update({ where: { id }, data: { status: 'closed' } }));
   }
+  const db = await load();
+  const o = db.orders.find((x) => x.id === id);
+  if (!o || o.status !== 'pending') return o;
+  o.status = 'closed';
+  await save(db);
   return o;
 }
 
 // ─── 试用次数 ─────────────────────────────────────────────
 // 记录每个身份（登录用户 id 或游客 guest cookie）已使用的免费解读次数。
+// PG 侧独立于 User 表：游客不在 User 中，若按 userId 计数会静默失败（游客无限试用）。
 export async function getTrialUsed(id: string): Promise<number> {
   const p = getPrisma();
   if (p) {
-    try {
-      const u = await p.user.findUnique({ where: { id } });
-      return u?.trialUses ?? 0;
-    } catch {
-      return 0;
-    }
+    const t = await p.trial.findUnique({ where: { identityId: id } });
+    return t?.used ?? 0;
   }
   const db = await load();
   return db.trials?.[id] ?? 0;
@@ -534,16 +559,98 @@ export async function getTrialUsed(id: string): Promise<number> {
 export async function incTrial(id: string): Promise<void> {
   const p = getPrisma();
   if (p) {
-    try {
-      await p.user.update({ where: { id }, data: { trialUses: { increment: 1 } } });
-    } catch {
-      /* 无 trialUses 列时静默忽略（JSON 模式为主） */
-    }
+    await p.trial.upsert({
+      where: { identityId: id },
+      create: { identityId: id, used: 1 },
+      update: { used: { increment: 1 } },
+    });
     return;
   }
   const db = await load();
   if (!db.trials) db.trials = {};
   db.trials[id] = (db.trials[id] ?? 0) + 1;
+  await save(db);
+}
+
+/** 解读生成失败时返还一次已扣的试用次数（不会把次数扣成负数）。 */
+export async function refundTrial(id: string): Promise<void> {
+  const p = getPrisma();
+  if (p) {
+    await p.trial.updateMany({
+      where: { identityId: id, used: { gt: 0 } },
+      data: { used: { decrement: 1 } },
+    });
+    return;
+  }
+  const db = await load();
+  if (!db.trials) db.trials = {};
+  db.trials[id] = Math.max(0, (db.trials[id] ?? 0) - 1);
+  await save(db);
+}
+
+/** 付费赠送的额外解读次数（单次精批等按次商品）。 */
+export async function getBonusUses(id: string): Promise<number> {
+  const p = getPrisma();
+  if (p) {
+    const t = await p.trial.findUnique({ where: { identityId: id } });
+    return t?.bonus ?? 0;
+  }
+  const db = await load();
+  return db.bonuses?.[id] ?? 0;
+}
+
+export async function grantTrialUses(id: string, uses: number): Promise<void> {
+  if (!Number.isFinite(uses) || uses <= 0) return;
+  const p = getPrisma();
+  if (p) {
+    await p.trial.upsert({
+      where: { identityId: id },
+      create: { identityId: id, bonus: uses },
+      update: { bonus: { increment: uses } },
+    });
+    return;
+  }
+  const db = await load();
+  if (!db.bonuses) db.bonuses = {};
+  db.bonuses[id] = (db.bonuses[id] ?? 0) + uses;
+  await save(db);
+}
+
+/**
+ * 登录时把游客身份的试用计数并入账号。
+ * 不这样做的话，用完免费次数再注册一个新号就能重新领一轮（刷次数）。
+ * used 取两边较大值、bonus 累加，并把游客行的 bonus 清零 —— 重复登录不会重复累加。
+ */
+export async function mergeGuestTrial(guestId: string, userId: string): Promise<void> {
+  if (!guestId || !userId || guestId === userId) return;
+  const p = getPrisma();
+  if (p) {
+    const [g, u] = await Promise.all([
+      p.trial.findUnique({ where: { identityId: guestId } }),
+      p.trial.findUnique({ where: { identityId: userId } }),
+    ]);
+    if (!g || (g.used === 0 && !g.bonus)) return;
+    const used = Math.max(u?.used ?? 0, g.used);
+    const bonus = (u?.bonus ?? 0) + (g.bonus ?? 0);
+    await p.trial.upsert({
+      where: { identityId: userId },
+      create: { identityId: userId, used, bonus },
+      update: { used, bonus },
+    });
+    await p.trial.update({ where: { identityId: guestId }, data: { used, bonus: 0 } });
+    return;
+  }
+  const db = await load();
+  const gUsed = db.trials?.[guestId] ?? 0;
+  const gBonus = db.bonuses?.[guestId] ?? 0;
+  if (gUsed === 0 && gBonus === 0) return;
+  if (!db.trials) db.trials = {};
+  if (!db.bonuses) db.bonuses = {};
+  const used = Math.max(db.trials[userId] ?? 0, gUsed);
+  db.trials[userId] = used;
+  db.bonuses[userId] = (db.bonuses[userId] ?? 0) + gBonus;
+  db.trials[guestId] = used;
+  db.bonuses[guestId] = 0;
   await save(db);
 }
 

@@ -9,7 +9,8 @@
 import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { isMember, getTrialUsed, getSettings } from '@/lib/db';
+import { isMember, getTrialUsed, getBonusUses, getSettings } from '@/lib/db';
+import { GUEST_COOKIE } from '@/lib/billing';
 
 // 试用次数优先级：后台设置 > 环境变量 TRIAL_USES > 默认 3。
 // 后台设置需读库，故改为异步（调用方均为 async 路由）。
@@ -43,8 +44,6 @@ export async function getTrialLimit(): Promise<number> {
 export function invalidateTrialLimitCache(): void {
   cachedTrialLimit = null;
 }
-
-export const GUEST_COOKIE = 'ziwei_guest';
 
 export interface Identity {
   id: string;
@@ -82,12 +81,15 @@ export interface QuotaResult {
   reason?: string;
 }
 
-/** 检查当前身份是否还有解读额度（会员始终放行）。 */
+/** 检查当前身份是否还有解读额度（会员始终放行；付费赠送次数叠加在试用额度之上）。 */
 export async function checkQuota(identity: Identity): Promise<QuotaResult> {
   if (identity.isMember) return { ok: true };
-  const used = await getTrialUsed(identity.id);
-  const limit = await getTrialLimit();
-  if (used < limit) return { ok: true };
+  const [used, bonus, limit] = await Promise.all([
+    getTrialUsed(identity.id),
+    getBonusUses(identity.id),
+    getTrialLimit(),
+  ]);
+  if (used < limit + bonus) return { ok: true };
   return {
     ok: false,
     reason: `免费试用次数已用完（共 ${limit} 次），开通会员即可无限次 AI 解读`,

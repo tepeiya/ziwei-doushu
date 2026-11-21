@@ -35,11 +35,20 @@ model User {
   passwordHash String?
   nickname     String?
   createdAt    DateTime      @default(now())
-  trialUses    Int           @default(0) // 已使用免费试用次数
   role         String        @default("user") // 'user' | 'admin'
   memberships  Membership[]
   charts       SavedChart[]
   orders       Order[]
+}
+
+/// 额度计数：按「身份 id」计数（登录用户 id 或游客 ziwei_guest cookie），
+/// 与 User 表解耦，游客同样有持久身份。
+/// bonus 为付费赠送的解读次数（如「单次精批」下单成功后发放）。
+model Trial {
+  identityId String   @id
+  used       Int      @default(0)
+  bonus      Int      @default(0)
+  updatedAt  DateTime @updatedAt
 }
 
 model Membership {

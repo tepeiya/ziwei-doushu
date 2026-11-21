@@ -13,6 +13,8 @@ import { buildChartContext } from '@/lib/server/prompt';
 import { getClientIp, rateLimit } from '@/lib/server/ratelimit';
 import { pipeModeratedStream } from '@/lib/server/moderation';
 import type { ZiweiChart } from '@/lib/ziwei/types';
+import { resolveIdentity, checkQuota } from '@/lib/billing/quota';
+import { incTrial, refundTrial } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,6 +42,18 @@ export async function POST(req: NextRequest) {
     return new Response('请求过于频繁，请稍后再试', { status: 429 });
   }
 
+  // 硬付费墙：与 AI 解读/流年共用同一套试用额度（同一身份累计），超出返回 402
+  const { identity, setCookie } = await resolveIdentity(req);
+  const quota = await checkQuota(identity);
+  if (!quota.ok) {
+    const res = new Response(
+      JSON.stringify({ error: quota.reason, code: 'PAYMENT_REQUIRED' }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } },
+    );
+    if (setCookie) res.headers.set('Set-Cookie', setCookie);
+    return res;
+  }
+
   let body: { chartA?: ZiweiChart; chartB?: ZiweiChart; question?: string };
   try {
     body = await req.json();
@@ -49,6 +63,8 @@ export async function POST(req: NextRequest) {
   if (!body.chartA || !body.chartB) {
     return new Response('缺少命盘数据', { status: 400 });
   }
+  // 请求体校验通过后再计入一次试用
+  await incTrial(identity.id);
 
   const conversation: ChatMessage[] = [
     { role: 'system', content: HEMING_SYSTEM },
@@ -68,20 +84,25 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       await pipeModeratedStream(conversation, controller, encoder, {
-        onComplete: (_full, report) => {
+        onComplete: async (_full, report, outcome) => {
           if (report.level !== 'safe') {
             console.warn('[moderation:heming]', report.level, 'block=', report.blockHits, 'warn=', report.warnHits);
+          }
+          // 生成失败/无正文时返还本次试用；硬阻断属内容拦截，不返还
+          if (outcome.errored || (outcome.deliveredChars === 0 && !outcome.blocked)) {
+            await refundTrial(identity.id);
           }
         },
       });
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    },
-  });
+  const headers: Record<string, string> = {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  };
+  // 首次访问下发游客 cookie，保证后续请求复用同一身份，试用次数才能累计
+  if (setCookie) headers['Set-Cookie'] = setCookie;
+  return new Response(stream, { headers });
 }

@@ -12,7 +12,7 @@ import { getClientIp, rateLimit } from '@/lib/server/ratelimit';
 import { pipeModeratedStream } from '@/lib/server/moderation';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 import { resolveIdentity, checkQuota } from '@/lib/billing/quota';
-import { incTrial } from '@/lib/db';
+import { incTrial, refundTrial } from '@/lib/db';
 import { getV4Interpretation, detectV4DimensionKey, v4DimensionLabel } from '@/lib/server/interp-v4';
 
 export const runtime = 'nodejs';
@@ -36,16 +36,12 @@ export async function POST(req: NextRequest) {
     if (setCookie) res.headers.set('Set-Cookie', setCookie);
     return res;
   }
-  // 通过配额校验后计入一次试用（会员为 identity.id 同样计数，但不影响放行）
-  await incTrial(identity.id);
-
   let body: { chart?: ZiweiChart; messages?: ChatMessage[] };
   try {
     body = await req.json();
   } catch {
     return new Response('Invalid JSON', { status: 400 });
   }
-
   const chart = body.chart;
   const messages: ChatMessage[] = Array.isArray(body.messages) ? body.messages : [];
 
@@ -110,12 +106,18 @@ ${draft}`,
   ];
 
   const encoder = new TextEncoder();
+  // 请求已确认合法、即将开始生成时才计入一次试用（会员同样计数，但不影响放行）
+  await incTrial(identity.id);
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       await pipeModeratedStream(conversation, controller, encoder, {
-        onComplete: (_full, report) => {
+        onComplete: async (_full, report, outcome) => {
           if (report.level !== 'safe') {
             console.warn('[moderation:interpret]', report.level, 'block=', report.blockHits, 'warn=', report.warnHits);
+          }
+          // 生成失败/无正文时返还本次试用；命中硬阻断属内容拦截，不返还（否则可用违规词刷次数）
+          if (outcome.errored || (outcome.deliveredChars === 0 && !outcome.blocked)) {
+            await refundTrial(identity.id);
           }
         },
       });

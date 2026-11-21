@@ -12,7 +12,7 @@
 // 因此 block 级采用「命中即停 + 末端纠错」策略；若业务需 100% 拦截，
 // 应改用非流式（先完整生成 → 审查 → 再回传）或接入专业内容安全 API。
 
-import { streamChat, type ChatMessage } from './llm';
+import { streamChat, isLLMFailureNotice, type ChatMessage } from './llm';
 
 // ── 软过滤词表：绝对化 / 承诺式 → 中性表述 ──
 const DEFAULT_SOFT_TERMS: Record<string, string> = {
@@ -148,25 +148,36 @@ export interface PipeOpts {
   /** 流末是否追加免责尾注，默认 true。 */
   disclaimer?: boolean;
   /** 完整文本审查后的审计钩子（告警 / 落库 / 上报内容安全）。 */
-  onComplete?: (full: string, report: ModerationReport) => void | Promise<void>;
+  onComplete?: (full: string, report: ModerationReport, outcome: PipeOutcome) => void | Promise<void>;
+}
+
+export interface PipeOutcome {
+  /** 实际交付给用户的正文字数（不含免责尾注与中断提示）。 */
+  deliveredChars: number;
+  /** LLM 流式生成过程中抛错（视为解读失败）。 */
+  errored: boolean;
+  /** 命中硬阻断词被截断（属内容拦截，不计为失败）。 */
+  blocked: boolean;
 }
 
 /**
  * 统一流式审查管道：把 LLM 的 SSE 增量经「软过滤 + 硬阻断 + 末端复核 + 免责尾注」
  * 处理后转发给 SSE controller。被各 AI 接口复用，审查逻辑一处维护。
+ * 返回值供调用方判断本次生成是否成功（用于失败返还试用次数）。
  */
 export async function pipeModeratedStream(
   messages: ChatMessage[],
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
   opts: PipeOpts = {},
-): Promise<void> {
+): Promise<PipeOutcome> {
   const enabled = isModerationEnabled();
   const appendDisclaimer = opts.disclaimer ?? true;
   const gen = opts.gen ?? streamChat(messages);
   const full: string[] = [];
   let blocked = false;
   let blockedBy: string[] = [];
+  let errored = false;
 
   const send = (text: string) => {
     if (text) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: { text } })}\n\n`));
@@ -174,6 +185,8 @@ export async function pipeModeratedStream(
 
   try {
     for await (const raw of gen) {
+      // streamChat 的降级提示 = 本次生成实际失败（据此返还试用次数），文本仍原样发给用户
+      if (isLLMFailureNotice(raw)) errored = true;
       let delta = enabled ? softFilter(raw) : raw;
       // 仅对首个分块的开头做自我介绍兜底清洗
       if (full.length === 0) delta = stripLeadingIntro(delta);
@@ -190,6 +203,7 @@ export async function pipeModeratedStream(
       send(delta);
     }
   } catch {
+    errored = true;
     send('⚠️ 解读生成中断，请稍后重试。');
   } finally {
     let text = full.join('');
@@ -209,12 +223,14 @@ export async function pipeModeratedStream(
       blockHits: blocked && base.blockHits.length === 0 ? blockedBy : base.blockHits,
       truncated: blocked,
     };
+    const outcome: PipeOutcome = { deliveredChars: full.join('').length, errored, blocked };
     try {
-      await opts.onComplete?.(text, report);
+      await opts.onComplete?.(text, report, outcome);
     } catch {
       // 审计失败不影响主流程
     }
     controller.enqueue(encoder.encode('data: [DONE]\n\n'));
     controller.close();
   }
+  return { deliveredChars: full.join('').length, errored, blocked };
 }

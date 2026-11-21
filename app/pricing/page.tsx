@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PLANS, formatYuan, type Plan } from '@/lib/billing';
 import SiteNav from '@/components/SiteNav';
@@ -8,6 +8,23 @@ export default function PricingPage() {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState('');
+  // 先用代码默认套餐渲染，再以 /api/plans 的后台生效值（改价、停用过滤）替换
+  const [list, setList] = useState<Plan[]>(Object.values(PLANS));
+  // 生效支付渠道：undefined=尚未拉到（先不显示支付说明），null=沙箱
+  const [payChannel, setPayChannel] = useState<'wechat' | 'alipay' | null | undefined>(undefined);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/plans')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        if (Array.isArray(d.plans) && d.plans.length) setList(d.plans as Plan[]);
+        if ('channel' in d) setPayChannel(d.channel ?? null);
+      })
+      .catch(() => { /* 拉取失败保留默认套餐 */ });
+    return () => { alive = false; };
+  }, []);
 
   async function buy(planId: string) {
     setErr('');
@@ -36,8 +53,6 @@ export default function PricingPage() {
       setErr('网络异常，请重试');
     }
   }
-
-  const list = Object.values(PLANS) as Plan[];
 
   return (
     <div className="with-tabbar" style={{ minHeight: '100vh', background: 'var(--bg-0)', padding: '48px 24px 80px' }}>
@@ -89,8 +104,15 @@ export default function PricingPage() {
         {err && <div style={{ textAlign: 'center', color: '#dc2626', fontSize: '13px', marginTop: '18px' }}>{err}</div>}
 
         <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--tx-3)', marginTop: '28px', lineHeight: 1.7 }}>
-          当前为沙箱演示：点击开通后将进入模拟支付页，无需真实扣款即可体验会员权益。<br />
-          正式上线时接入微信支付 / 支付宝，回调验签后即可自动激活会员。
+          {payChannel === null && (
+            <>
+              当前为沙箱演示：点击开通后将进入模拟支付页，无需真实扣款即可体验会员权益。<br />
+              正式上线时接入微信支付 / 支付宝，回调验签后即可自动激活会员。<br />
+            </>
+          )}
+          {payChannel === 'wechat' && <>点击开通后将跳转微信支付完成付款，支付成功后自动激活会员权益。<br /></>}
+          {payChannel === 'alipay' && <>点击开通后将跳转支付宝完成付款，支付成功后自动激活会员权益。<br /></>}
+          会员服务到期后不自动续费；未使用的按次商品支持 7 天内退款，详见<a href="/terms" style={{ color: 'var(--ac)' }}>服务条款</a>「退款与取消订阅」。
         </p>
       </div>
 

@@ -206,6 +206,36 @@ export default function AdminConsole() {
     }
   }
 
+  async function orderAction(orderId: string, force = false) {
+    if (
+      force &&
+      !window.confirm(`确认强制入账订单 ${orderId}？\n该操作会直接发放权益，请先核实确已收款。`)
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const d = await api<{ ok: boolean; alreadyPaid?: boolean; order: OrderRow }>('/api/admin/orders', {
+        method: 'POST',
+        body: JSON.stringify({ orderId, force }),
+      });
+      notify(
+        d.alreadyPaid
+          ? '该订单已支付'
+          : d.ok
+            ? '已入账，权益已发放'
+            : d.order?.status === 'closed'
+              ? '网关确认未付款，订单已超时关闭'
+              : '未确认收款，订单保持待支付',
+      );
+      await Promise.all([loadOrders(), loadOverview(), loadMembers()]);
+    } catch (e) {
+      notify((e as Error).message, false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveSettings() {
     setBusy(true);
     try {
@@ -558,6 +588,10 @@ export default function AdminConsole() {
       {/* 订单 */}
       {tab === 'orders' && (
         <div style={card}>
+          <p style={{ fontSize: 12, color: 'var(--tx-3)', margin: '0 0 12px' }}>
+            待支付订单超过 30 分钟自动关闭。「查单」向支付网关核对真实收款状态，确认已付款且金额一致才补入账；
+            「强制入账」用于线下转账等网关查不到的情形，请先核实收款。
+          </p>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -568,6 +602,7 @@ export default function AdminConsole() {
                   <th style={th}>状态</th>
                   <th style={th}>渠道</th>
                   <th style={th}>时间</th>
+                  <th style={th}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -583,11 +618,25 @@ export default function AdminConsole() {
                     </td>
                     <td style={td}>{o.channel ?? '—'}</td>
                     <td style={td}>{fmtDate(o.paidAt ?? o.createdAt)}</td>
+                    <td style={td}>
+                      {o.status === 'paid' ? (
+                        '—'
+                      ) : (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button disabled={busy} style={btnGhost} onClick={() => orderAction(o.id)}>
+                            查单
+                          </button>
+                          <button disabled={busy} style={btnGhost} onClick={() => orderAction(o.id, true)}>
+                            强制入账
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {orders.length === 0 && (
                   <tr>
-                    <td style={td} colSpan={6}>暂无订单</td>
+                    <td style={td} colSpan={7}>暂无订单</td>
                   </tr>
                 )}
               </tbody>

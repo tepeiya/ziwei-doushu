@@ -13,7 +13,7 @@ import { getClientIp, rateLimit } from '@/lib/server/ratelimit';
 import { pipeModeratedStream } from '@/lib/server/moderation';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 import { resolveIdentity, checkQuota } from '@/lib/billing/quota';
-import { incTrial } from '@/lib/db';
+import { incTrial, refundTrial } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,8 +51,6 @@ export async function POST(req: NextRequest) {
     if (setCookie) res.headers.set('Set-Cookie', setCookie);
     return res;
   }
-  await incTrial(identity.id);
-
   let body: { chart?: ZiweiChart; year?: number };
   try {
     body = await req.json();
@@ -73,12 +71,18 @@ export async function POST(req: NextRequest) {
   ];
 
   const encoder = new TextEncoder();
+  // 请求已确认合法、即将开始生成时才计入一次试用
+  await incTrial(identity.id);
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       await pipeModeratedStream(conversation, controller, encoder, {
-        onComplete: (_full, report) => {
+        onComplete: async (_full, report, outcome) => {
           if (report.level !== 'safe') {
             console.warn('[moderation:fortune]', report.level, 'block=', report.blockHits, 'warn=', report.warnHits);
+          }
+          // 生成失败/无正文时返还本次试用；硬阻断属内容拦截，不返还
+          if (outcome.errored || (outcome.deliveredChars === 0 && !outcome.blocked)) {
+            await refundTrial(identity.id);
           }
         },
       });
