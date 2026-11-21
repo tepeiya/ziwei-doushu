@@ -10,6 +10,7 @@
 // 字体：/public/fonts/HeiTi.ttf（浏览器端 fetch 后嵌入）
 
 import { jsPDF } from 'jspdf';
+import { readSseStream } from './sse-client';
 import type { ZiweiChart } from './ziwei/types';
 
 export interface PdfInput {
@@ -104,6 +105,76 @@ function drawSeal(doc: jsPDF, cx: number, cy: number, size: number, char = '命'
   doc.setFontSize(Math.round(size * 0.56));
   setText(doc, [255, 255, 255]);
   doc.text(char, cx, cy, { baseline: 'middle', align: 'center' } as any);
+}
+
+/** 实心菱形（纹饰 / 角饰通用） */
+function diamond(doc: jsPDF, cx: number, cy: number, r: number, color: RGB = GOLD) {
+  setFill(doc, color);
+  doc.triangle(cx, cy - r, cx - r, cy, cx + r, cy, 'F');
+  doc.triangle(cx, cy + r, cx - r, cy, cx + r, cy, 'F');
+}
+
+/** 章节分隔纹饰：两端细线 + 中心菱形 + 两侧小珠 */
+function drawDivider(doc: jsPDF, x0: number, x1: number, y: number, color: RGB = GOLD) {
+  const cx = (x0 + x1) / 2;
+  const gap = 14;
+  setDraw(doc, color);
+  doc.setLineWidth(0.5);
+  doc.line(x0, y, cx - gap, y);
+  doc.line(cx + gap, y, x1, y);
+  setFill(doc, color);
+  diamond(doc, cx, y, 3.2, color);
+  doc.circle(cx - gap, y, 1.5, 'F');
+  doc.circle(cx + gap, y, 1.5, 'F');
+}
+
+/** 整页精装金框 + 四角菱形角饰（每页内容页统一套用） */
+function drawPageFrame(doc: jsPDF, pdfW: number, pdfH: number) {
+  const i1 = 16;
+  const i2 = 22;
+  setDraw(doc, GOLD_A);
+  doc.setLineWidth(0.9);
+  doc.rect(i1, i1, pdfW - 2 * i1, pdfH - 2 * i1);
+  doc.setLineWidth(0.4);
+  doc.rect(i2, i2, pdfW - 2 * i2, pdfH - 2 * i2);
+  const r = 3;
+  for (const [cx, cy] of [
+    [i2, i2],
+    [pdfW - i2, i2],
+    [i2, pdfH - i2],
+    [pdfW - i2, pdfH - i2],
+  ]) {
+    diamond(doc, cx, cy, r, GOLD);
+  }
+}
+
+/** 极淡水印：居中巨大「命」字 + 细环，置于正文之下增加层次 */
+function drawWatermark(doc: jsPDF, pdfW: number, pdfH: number) {
+  const G = (doc as any).GState;
+  if (!G) return;
+  // jsPDF 的 opacity 只映射到 /ca（填充），描边圆环需另设 stroke-opacity(/CA)，否则会以全不透明压住正文
+  try {
+    doc.setGState(new G({ opacity: 0.05, 'stroke-opacity': 0.05 }));
+  } catch {
+    /* 不支持透明则跳过水印 */
+    return;
+  }
+  // 段落跨页时 ensure() 会在排版循环中途调用本函数，字号必须复原，
+  // 否则残留的 230 会把该段后续行画成巨型字。
+  const prevSize = doc.getFontSize();
+  doc.setFont(FONT_NAME, 'normal');
+  doc.setFontSize(230);
+  setText(doc, GOLD);
+  doc.text('命', pdfW / 2, pdfH / 2, { baseline: 'middle', align: 'center' } as any);
+  doc.setLineWidth(0.6);
+  setDraw(doc, GOLD);
+  doc.circle(pdfW / 2, pdfH / 2, 132, 'S');
+  try {
+    doc.setGState(new G({ opacity: 1, 'stroke-opacity': 1 }));
+  } catch {
+    /* noop */
+  }
+  doc.setFontSize(prevSize);
 }
 
 // ---- 封面（矢量）----
@@ -213,10 +284,100 @@ function drawFooter(doc: jsPDF, spec: DocSpec, margin: number, imgW: number, foo
   doc.setFont(FONT_NAME, 'normal');
   doc.setFontSize(8.5);
   setText(doc, MUTED);
-  doc.text(`— 第 ${page} / ${total} 页 —`, margin + imgW / 2, fy + 6, {
-    baseline: 'top',
-    align: 'center',
-  } as any);
+  const label = `第 ${page} / ${total} 页`;
+  doc.text(label, margin + imgW / 2, fy + 6, { baseline: 'top', align: 'center' } as any);
+  const tw = doc.getTextWidth(label);
+  const cy = fy + 10.5;
+  setFill(doc, GOLD);
+  diamond(doc, margin + imgW / 2 - tw / 2 - 11, cy, 2.4);
+  diamond(doc, margin + imgW / 2 + tw / 2 + 11, cy, 2.4);
+}
+
+// ---- 目录（封面后插入）----
+/** 从正文中提取章节标题（**【xxx】**）顺序，供目录使用 */
+function parseTocTitles(text: string): string[] {
+  const titles: string[] = [];
+  for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
+    const line = raw.trim();
+    const m = line.match(/^\*\*【(.+?)】\*\*$/);
+    if (m) titles.push(m[1]);
+  }
+  return titles;
+}
+
+/** 将标题按页容量分块（精确模拟行高，避免目录溢出到错误页） */
+function chunkToc(doc: jsPDF, titles: string[], maxW: number, topWindow: number, bottomWindow: number): string[][] {
+  doc.setFont(FONT_NAME, 'normal');
+  const FS = 11;
+  const ROW = 21;
+  const TITLE_BLOCK = 52; // 与 drawTocPage 中「目录」标题块+间距的实际高度一致
+  const chunks: string[][] = [];
+  let cur: string[] = [];
+  let used = TITLE_BLOCK;
+  const cap = bottomWindow - topWindow - ROW; // 末尾多留一行，避免压到页脚线
+  for (const t of titles) {
+    const lines = wrapPlain(doc, '【' + t + '】', maxW, FS);
+    const h = lines.length * ROW;
+    if (used + h > cap && cur.length) {
+      chunks.push(cur);
+      cur = [];
+      used = 0;
+    }
+    cur.push(t);
+    used += h;
+  }
+  if (cur.length) chunks.push(cur);
+  return chunks;
+}
+
+/** 绘制单页目录（ci 为该目录页在整体中的序号） */
+function drawTocPage(
+  doc: jsPDF,
+  _spec: DocSpec,
+  margin: number,
+  imgW: number,
+  topWindow: number,
+  entries: { title: string; page: number }[],
+) {
+  const PW = doc.internal.pageSize.getWidth();
+  const PH = doc.internal.pageSize.getHeight();
+  drawWatermark(doc, PW, PH);
+  const FS = 11;
+  const ROW = 21;
+  doc.setFont(FONT_NAME, 'normal');
+  let y = topWindow + 8;
+
+  // “目录” 标题 + 金色竖条 + 分隔线
+  setText(doc, ACCENT);
+  doc.setFontSize(16);
+  doc.text('目录', margin, y, { baseline: 'top' } as any);
+  setFill(doc, GOLD);
+  doc.rect(margin, y + 22, 3, 14, 'F');
+  setDraw(doc, GOLD_A);
+  doc.setLineWidth(0.6);
+  doc.line(margin + 12, y + 26, margin + imgW, y + 26);
+  y += 44;
+
+  const maxW = imgW - 60;
+  for (const e of entries) {
+    const titleStr = '【' + e.title + '】';
+    doc.setFontSize(FS);
+    setText(doc, HEADING);
+    doc.text(titleStr, margin, y, { baseline: 'top' } as any);
+    const pg = String(e.page);
+    const pgW = doc.getTextWidth(pg);
+    setText(doc, TEXT_DARK);
+    doc.text(pg, margin + imgW, y, { baseline: 'top', align: 'right' } as any);
+    // 虚线引导线（连接标题与页码）
+    const titleW = doc.getTextWidth(titleStr);
+    setDraw(doc, MUTED);
+    doc.setLineWidth(0.4);
+    doc.setLineDashPattern([1, 3], 0);
+    const ly = y + FS * 0.4;
+    doc.line(margin + titleW + 6, ly, margin + imgW - pgW - 6, ly);
+    doc.setLineDashPattern([], 0);
+    y += ROW;
+  }
 }
 
 // ---- 排版辅助 ----
@@ -299,7 +460,7 @@ async function specToPdf(spec: DocSpec): Promise<void> {
   const headerH = 26;
   const footerH = 20;
   const topGap = 10;
-  const bottomGap = 14;
+  const bottomGap = 22;
   const topWindow = margin + headerH + topGap;
   const bottomWindow = pdfH - margin - footerH - bottomGap;
 
@@ -310,8 +471,17 @@ async function specToPdf(spec: DocSpec): Promise<void> {
   const INDENT = 21;
   const PARA_GAP = 6;
 
+  // 解析目录标题，并预排版确定目录页数（封面后插入）
+  const tocTitles = parseTocTitles(spec.text);
+  const tocChunks = tocTitles.length
+    ? chunkToc(doc, tocTitles, imgW - 60, topWindow, bottomWindow)
+    : [];
+  const tocPageCount = tocChunks.length;
+
   // 第 1 页：封面
   drawCover(doc, spec, pdfW, pdfH);
+  // 在封面之后、正文之前预留目录页
+  for (let i = 0; i < tocPageCount; i++) doc.addPage();
 
   const rawLines = spec.text.replace(/\r\n/g, '\n').split('\n');
   const hasContent = rawLines.some((l) => l.trim() !== '');
@@ -320,37 +490,45 @@ async function specToPdf(spec: DocSpec): Promise<void> {
     return;
   }
 
+  // 目录条目：章节标题 → 实际页码（正文排版时填充）
+  const tocEntries: { title: string; page: number }[] = [];
+
   // 正文流式布局
   let y = topWindow;
   const ensure = (h: number) => {
     if (y + h > bottomWindow) {
       doc.addPage();
+      drawWatermark(doc, pdfW, pdfH);
       y = topWindow;
     }
   };
   const addHeading = (text: string) => {
-    ensure(HEADLH + 10);
-    y += 6;
-    doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
-    setFill(doc, GOLD);
-    doc.rect(margin, y, 3, HEAD + 4, 'F');
+    ensure(HEADLH + 56);
+    y += 10;
+    drawDivider(doc, margin, margin + imgW, y);
+    y += 18;
     doc.setFont(FONT_NAME, 'normal');
-    doc.setFontSize(HEAD);
+    doc.setFontSize(HEAD + 3);
     setText(doc, HEADING);
-    doc.text(text, margin + 10, y, { baseline: 'top' } as any);
-    y += HEADLH + 4;
+    doc.text('【' + text + '】', margin, y, { baseline: 'top' } as any);
+    y += HEAD + 3;
+    setDraw(doc, GOLD_A);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y + 4, margin + imgW, y + 4);
+    y += 16;
+    tocEntries.push({ title: text, page: doc.getCurrentPageInfo().pageNumber });
   };
   const addParagraph = (line: string) => {
     const segs = parseSegments(line);
     doc.setFont(FONT_NAME, 'normal');
     doc.setFontSize(BODY);
-    // 首行缩进 INDENT，故其可排宽度收窄为 imgW - INDENT；
-    // 其余行从 margin 起排，宽度为 imgW。两者右边界均落在 margin+imgW，
-    // 与页眉/页脚分隔线齐平，正文不会超出线外。
+    // 普通段落：首行缩进 INDENT，其余行从 margin 起排，右边界与页眉/页脚线齐平
     const wrapped = wrapSegments(doc, segs, (i) => (i === 0 ? imgW - INDENT : imgW));
     let first = true;
     for (const ln of wrapped) {
       ensure(LH);
+      // ensure() 跨页时会调用 drawWatermark，这里显式锁定正文字号，保证每行都是 BODY
+      doc.setFontSize(BODY);
       let x = margin + (first ? INDENT : 0);
       setText(doc, TEXT_DARK);
       for (const seg of ln) {
@@ -371,6 +549,7 @@ async function specToPdf(spec: DocSpec): Promise<void> {
 
   doc.addPage();
   y = topWindow;
+  drawWatermark(doc, pdfW, pdfH);
   for (const r of rawLines) {
     const line = r.trim();
     if (line === '') {
@@ -380,21 +559,37 @@ async function specToPdf(spec: DocSpec): Promise<void> {
     }
     const m = line.match(/^\*\*【(.+?)】\*\*$/);
     if (m) {
-      addHeading('【' + m[1] + '】');
+      addHeading(m[1]);
       continue;
     }
     addParagraph(line);
   }
 
+  // 绘制目录（封面之后、正文之前已预留页面）
+  if (tocPageCount > 0) {
+    let k = 0;
+    for (let ci = 0; ci < tocChunks.length; ci++) {
+      const n = tocChunks[ci].length;
+      const pageEntries = tocEntries.slice(k, k + n);
+      k += n;
+      doc.setPage(2 + ci);
+      drawTocPage(doc, spec, margin, imgW, topWindow, pageEntries);
+    }
+  }
+
   // 末页补页脚留白由 bottomWindow 保证；逐页绘制页眉页脚
+  // 目录页（封面后）只绘页脚、不绘页眉，避免与“目录”标题重叠
   const total = doc.getNumberOfPages();
   for (let p = 2; p <= total; p++) {
     doc.setPage(p);
-    drawHeader(doc, spec, margin, imgW, headerH);
+    if (p > 1 + tocPageCount) drawHeader(doc, spec, margin, imgW, headerH);
     drawFooter(doc, spec, margin, imgW, footerH, p, total);
+    drawPageFrame(doc, pdfW, pdfH);
   }
 
   doc.save(spec.filename);
+  // __DEBUG_HOOK__ 仅在 node 调试时由外部设置，用于导出字节；浏览器环境无影响
+  if (typeof (globalThis as any)._dumpPdf === 'function') (globalThis as any)._dumpPdf(doc);
 }
 
 /** 命盘基础信息兜底解读（当 AI 解读与 v4 数据集皆为空时使用，保证内容页不空白） */
@@ -445,7 +640,8 @@ export async function buildV4Section(birth: {
     }
     const lines: string[] = ['**【v4.0 数据集 · 13 维原生解读】**', ''];
     for (const d of json.dimensions as { label: string; text: string }[]) {
-      lines.push(`**【${d.label}】**`, '', d.text || '（该维度无内容）', '');
+      // 维度用行内加粗标签而非 **【】** 标题：后者会被目录逐条收录，13 维会把目录撑成一页以上
+      lines.push(`**${d.label}：**${d.text || '（该维度无内容）'}`, '');
     }
     return lines.join('\n');
   } catch {
@@ -453,7 +649,49 @@ export async function buildV4Section(birth: {
   }
 }
 
-/** 命盘解读 → 紫微命书 PDF（含封面 + 13 维原生解读 + 兜底） */
+/**
+ * 白话总结：调用现有 /api/interpret，把命盘浓缩成普通人也能读懂的一段话，供导出时放在文末。
+ * 提问措辞刻意避开数据集的维度关键词（感情/事业/财/健康/性格…），
+ * 使 detectV4DimensionKey 落到 overview 底稿，而不是被某个单一维度带跑。
+ * 未配置 / 付费墙 / 限流等任何失败都返回空串，不中断导出。仅浏览器端调用。
+ */
+export async function buildPlainSummary(chart: ZiweiChart): Promise<string> {
+  const prompt = [
+    '请把上面这份命盘解读浓缩成一段大白话总结，写给完全不懂紫微斗数的普通人看。要求：',
+    '1. 不用术语；必须提到星曜时，用一句话解释它代表什么。',
+    '2. 先讲这个人天生的底色与做事风格，再讲他这一生的整体走向和节奏。',
+    '3. 明确说清当下这十年该把力气用在哪儿、需要留意什么。',
+    '4. 语气平实，像跟熟人聊天，不要分条罗列。',
+    '5. 控制在 400 字以内，直接输出正文，不要加小标题。',
+  ].join('\n');
+
+  try {
+    const res = await fetch('/api/interpret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chart, messages: [{ role: 'user', content: prompt }] }),
+    });
+    if (!res.ok || !res.body) return '';
+    let out = '';
+    await readSseStream(res.body, (data) => {
+      if (data === '[DONE]') return;
+      try {
+        out += JSON.parse(data).delta?.text ?? '';
+      } catch {
+        /* 跳过无法解析的行 */
+      }
+    });
+    // 流末会带服务端 pipeModeratedStream 追加的「---\n*免责尾注*」；
+    // 封面已有免责声明，留在正文末尾只会渲染成裸 markdown 符号，故切掉。
+    const tail = out.lastIndexOf('\n---');
+    if (tail > 0) out = out.slice(0, tail);
+    return out.trim();
+  } catch {
+    return '';
+  }
+}
+
+/** 命盘解读 → 紫微命书 PDF（封面 + 目录 + 正文；正文由调用方拼装） */
 export function exportChartPdf(input: PdfInput & { chart?: ZiweiChart }): Promise<void> {
   const site = siteUrl();
   let text = input.text;
